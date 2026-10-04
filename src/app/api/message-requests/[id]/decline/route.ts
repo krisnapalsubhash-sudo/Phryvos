@@ -34,26 +34,26 @@ export async function POST(
       return NextResponse.json({ error: 'Request already processed' }, { status: 400 });
     }
 
-    // Update message request status
-    await prisma.messageRequest.update({
-      where: { id },
-      data: {
-        status: 'DECLINED',
-        respondedAt: new Date(),
-      },
-    });
-
-    // Create notification for sender
-    await prisma.notification.create({
-      data: {
-        userId: messageRequest.senderId,
-        actorId: session.user.id,
-        type: 'MESSAGE_REQUEST_DECLINED',
-        title: 'Message Request Declined',
-        body: `${session.user.name || 'Someone'} declined your message request`,
-        data: JSON.stringify({ requestId: id }),
-      },
-    });
+    // Update atomically
+    await prisma.$transaction([
+      prisma.messageRequest.update({
+        where: { id },
+        data: {
+          status: 'DECLINED',
+          respondedAt: new Date(),
+        },
+      }),
+      prisma.notification.create({
+        data: {
+          userId: messageRequest.senderId,
+          actorId: session.user.id,
+          type: 'MESSAGE_REQUEST_DECLINED',
+          title: 'Message Request Declined',
+          body: `${session.user.name || 'Someone'} declined your message request`,
+          data: JSON.stringify({ requestId: id }),
+        },
+      })
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -51,68 +51,71 @@ export async function POST(
       return NextResponse.json({ error: 'Request already processed' }, { status: 400 });
     }
 
-    // Create conversation and add both users as participants
-    const conversation = await prisma.conversation.create({
-      data: {
-        participants: {
-          create: [
-            { userId: session.user.id },
-            { userId: messageRequest.senderId },
-          ],
-        },
-        messages: {
-          create: {
-            senderId: messageRequest.senderId,
-            receiverId: session.user.id,
-            content: messageRequest.initialMessage,
-            type: 'TEXT',
+    // Execute atomically
+    const conversation = await prisma.$transaction(async (tx) => {
+      const conv = await tx.conversation.create({
+        data: {
+          participants: {
+            create: [
+              { userId: session.user.id },
+              { userId: messageRequest.senderId },
+            ],
+          },
+          messages: {
+            create: {
+              senderId: messageRequest.senderId,
+              receiverId: session.user.id,
+              content: messageRequest.initialMessage,
+              type: 'TEXT',
+            },
           },
         },
-      },
-      include: {
-        participants: {
-          include: { user: { select: USER_PUBLIC_FIELDS } },
+        include: {
+          participants: {
+            include: { user: { select: USER_PUBLIC_FIELDS } },
+          },
         },
-      },
-    });
+      });
 
-    // Update message request status
-    await prisma.messageRequest.update({
-      where: { id },
-      data: {
-        status: 'ACCEPTED',
-        respondedAt: new Date(),
-      },
-    });
+      await tx.messageRequest.update({
+        where: { id },
+        data: {
+          status: 'ACCEPTED',
+          respondedAt: new Date(),
+        },
+      });
 
-    // Create connection (mutual follow)
-    await prisma.$transaction([
-      prisma.connection.create({
-        data: { userId: session.user.id, connectedUserId: messageRequest.senderId },
-      }),
-      prisma.connection.create({
-        data: { userId: messageRequest.senderId, connectedUserId: session.user.id },
-      }),
-      prisma.user.update({
-        where: { id: session.user.id },
-        data: { following: { increment: 1 }, followers: { increment: 1 } },
-      }),
-      prisma.user.update({
-        where: { id: messageRequest.senderId },
-        data: { following: { increment: 1 }, followers: { increment: 1 } },
-      }),
-    ]);
+      // Upsert connections to avoid unique constraint violations
+      const existingConn1 = await tx.connection.findUnique({
+        where: { userId_connectedUserId: { userId: session.user.id, connectedUserId: messageRequest.senderId } }
+      });
+      if (!existingConn1) {
+        await tx.connection.create({ data: { userId: session.user.id, connectedUserId: messageRequest.senderId } });
+        await tx.user.update({ where: { id: session.user.id }, data: { following: { increment: 1 } } });
+        await tx.user.update({ where: { id: messageRequest.senderId }, data: { followers: { increment: 1 } } });
+      }
 
-    // Create notification for sender
-    await prisma.notification.create({
-      data: {
-        userId: messageRequest.senderId,
-        actorId: session.user.id,
-        type: 'MESSAGE_REQUEST_ACCEPTED',
-        title: 'Message Request Accepted',
-        body: `${session.user.name || 'Someone'} accepted your message request`,
-        data: JSON.stringify({ conversationId: conversation.id }),
-      },
+      const existingConn2 = await tx.connection.findUnique({
+        where: { userId_connectedUserId: { userId: messageRequest.senderId, connectedUserId: session.user.id } }
+      });
+      if (!existingConn2) {
+        await tx.connection.create({ data: { userId: messageRequest.senderId, connectedUserId: session.user.id } });
+        await tx.user.update({ where: { id: messageRequest.senderId }, data: { following: { increment: 1 } } });
+        await tx.user.update({ where: { id: session.user.id }, data: { followers: { increment: 1 } } });
+      }
+
+      await tx.notification.create({
+        data: {
+          userId: messageRequest.senderId,
+          actorId: session.user.id,
+          type: 'MESSAGE_REQUEST_ACCEPTED',
+          title: 'Message Request Accepted',
+          body: `${session.user.name || 'Someone'} accepted your message request`,
+          data: JSON.stringify({ conversationId: conv.id }),
+        },
+      });
+
+      return conv;
     });
 
     return NextResponse.json({
