@@ -22,22 +22,7 @@ export class PrivacyService {
   public async blockUser(blockerId: string, blockedId: string): Promise<boolean> {
     if (!blockerId || !blockedId || blockerId === blockedId) return false;
 
-    // 1. Update in-memory caches instantly
-    let blockerSet = this.blockCache.get(blockerId);
-    if (!blockerSet) {
-      blockerSet = new Set();
-      this.blockCache.set(blockerId, blockerSet);
-    }
-    blockerSet.add(blockedId);
-
-    let blockedBySet = this.blockedByCache.get(blockedId);
-    if (!blockedBySet) {
-      blockedBySet = new Set();
-      this.blockedByCache.set(blockedId, blockedBySet);
-    }
-    blockedBySet.add(blockerId);
-
-    // 2. Persist to PostgreSQL database asynchronously
+    // 1. Persist to PostgreSQL database first to ensure durable truth (Phase 64)
     try {
       const prisma = getPrismaClient();
       if (prisma.block) {
@@ -56,9 +41,24 @@ export class PrivacyService {
         });
       }
     } catch (err) {
-      // Safe fallback if database is offline or in build mode
-      console.warn('Database block persistence deferred:', (err as any)?.message);
+      console.error('Database block persistence failed:', (err as any)?.message);
+      return false;
     }
+
+    // 2. Update in-memory caches following durable database success
+    let blockerSet = this.blockCache.get(blockerId);
+    if (!blockerSet) {
+      blockerSet = new Set();
+      this.blockCache.set(blockerId, blockerSet);
+    }
+    blockerSet.add(blockedId);
+
+    let blockedBySet = this.blockedByCache.get(blockedId);
+    if (!blockedBySet) {
+      blockedBySet = new Set();
+      this.blockedByCache.set(blockedId, blockedBySet);
+    }
+    blockedBySet.add(blockerId);
 
     return true;
   }
@@ -67,12 +67,6 @@ export class PrivacyService {
    * Unblock a user in database and cache
    */
   public async unblockUser(blockerId: string, blockedId: string): Promise<boolean> {
-    const blockerSet = this.blockCache.get(blockerId);
-    if (blockerSet) blockerSet.delete(blockedId);
-
-    const blockedBySet = this.blockedByCache.get(blockedId);
-    if (blockedBySet) blockedBySet.delete(blockerId);
-
     try {
       const prisma = getPrismaClient();
       if (prisma.block) {
@@ -81,8 +75,15 @@ export class PrivacyService {
         });
       }
     } catch (err) {
-      console.warn('Database unblock error:', (err as any)?.message);
+      console.error('Database unblock error:', (err as any)?.message);
+      return false;
     }
+
+    const blockerSet = this.blockCache.get(blockerId);
+    if (blockerSet) blockerSet.delete(blockedId);
+
+    const blockedBySet = this.blockedByCache.get(blockedId);
+    if (blockedBySet) blockedBySet.delete(blockerId);
 
     return true;
   }
@@ -244,6 +245,7 @@ export class PrivacyService {
 
   /**
    * Filter an array of items (users, posts, notifications) to exclude any blocked relations
+   * Phase 66: Bounded O(1) Set lookup eliminating N+1 DB loops
    */
   public async filterBlocked<T extends { id: string }>(
     currentUserId: string,
@@ -251,14 +253,36 @@ export class PrivacyService {
   ): Promise<T[]> {
     if (!currentUserId || items.length === 0) return items;
 
-    const filtered: T[] = [];
-    for (const item of items) {
-      const blocked = await this.isBlocked(currentUserId, item.id);
-      if (!blocked) {
-        filtered.push(item);
+    const itemIds = items.map((item) => item.id);
+    const blockedSet = new Set<string>();
+
+    // 1. Preload fast in-memory sync caches
+    const cachedBlocked = this.blockCache.get(currentUserId);
+    const cachedBlockedBy = this.blockedByCache.get(currentUserId);
+    if (cachedBlocked) cachedBlocked.forEach((id) => blockedSet.add(id));
+    if (cachedBlockedBy) cachedBlockedBy.forEach((id) => blockedSet.add(id));
+
+    // 2. Single batch query for items to eliminate N+1 database calls
+    try {
+      const prisma = getPrismaClient();
+      if (prisma.block) {
+        const dbBlocks = await prisma.block.findMany({
+          where: {
+            OR: [
+              { blockerId: currentUserId, blockedId: { in: itemIds } },
+              { blockerId: { in: itemIds }, blockedId: currentUserId },
+            ],
+          },
+          select: { blockerId: true, blockedId: true },
+        });
+
+        for (const b of dbBlocks) {
+          blockedSet.add(b.blockerId === currentUserId ? b.blockedId : b.blockerId);
+        }
       }
-    }
-    return filtered;
+    } catch {}
+
+    return items.filter((item) => !blockedSet.has(item.id));
   }
 
   /**

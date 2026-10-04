@@ -87,6 +87,15 @@ export class SafetyEngine {
       };
     }
 
+    // Phase 60: Memory leak prevention - reclaim expired rate limit entries
+    if (this.rateLimits.size > 1000) {
+      for (const [k, tracker] of this.rateLimits.entries()) {
+        if (now > tracker.resetAt) {
+          this.rateLimits.delete(k);
+        }
+      }
+    }
+
     const checks: Array<{ key: string; limit: number; windowMs: number; scope: 'user' | 'ip' | 'room' }> = [
       { key: `user:${userId}`, limit: 8, windowMs: 4000, scope: 'user' },
     ];
