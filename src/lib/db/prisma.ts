@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import '@/env'; // Validate environment variables
 
 // Prevent multiple instances of Prisma Client in development / serverless reloads
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };

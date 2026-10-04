@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 4000",
-    "build": "prisma generate && (prisma db push --skip-generate --accept-data-loss || true) && next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -15,7 +15,7 @@
     "@auth/prisma-adapter": "^2.11.3",
     "@eslint/eslintrc": "^3.3.7",
     "@hookform/resolvers": "^5.9.1",
-    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/adapter-pg": "^5.22.0",
     "@prisma/client": "5.22.0",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-dropdown-menu": "^2.1.24",
@@ -59,8 +59,8 @@
     "@types/node": "20.19.43",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.1",
-    "eslint": "^10.9.1",
-    "eslint-config-next": "16.3.3",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "15.0.0",
     "lightningcss": "1.33.0",
     "typescript": "5.9.3",
     "vitest": "^2.1.9"
