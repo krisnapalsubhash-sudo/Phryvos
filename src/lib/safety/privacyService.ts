@@ -281,66 +281,109 @@ export class PrivacyService {
   /**
    * Calculate interest match score between two users
    */
-  private calculateInterestScore(prefsA: MatchPreferences | undefined, prefsB: MatchPreferences | undefined, userA: RealtimeUser, userB: RealtimeUser): { score: number; reasons: string[] } {
-    if (!prefsA?.enableInterestMatch || !prefsB?.enableInterestMatch) {
-      return { score: 0.5, reasons: [] };
+  private calculateInterestScore(
+    prefsA: MatchPreferences | undefined,
+    prefsB: MatchPreferences | undefined,
+    userA: RealtimeUser,
+    userB: RealtimeUser
+  ): {
+    score: number;
+    overlapCount: number;
+    categoryCounts: {
+      interests: number;
+      languages: number;
+      games: number;
+      hobbies: number;
+      topics: number;
+    };
+    reasons: string[];
+  } {
+    const defaultRes = {
+      score: 0,
+      overlapCount: 0,
+      categoryCounts: { interests: 0, languages: 0, games: 0, hobbies: 0, topics: 0 },
+      reasons: [],
+    };
+
+    if (!prefsA?.enableInterestMatch && !prefsB?.enableInterestMatch) {
+      return { ...defaultRes, score: 50 };
     }
 
     let score = 0;
     const reasons: string[] = [];
     const maxScore = 100;
 
-    // Interest overlap (weight: 30)
-    const interestsA = new Set([...(userA.interests || []), ...(prefsA.interests || [])]);
-    const interestsB = new Set([...(userB.interests || []), ...(prefsB.interests || [])]);
-    const interestOverlap = [...interestsA].filter(i => interestsB.has(i));
+    // Interest overlap (weight: 30) - Set deduplication prevents inflation
+    const interestsA = new Set([...(userA.interests || []), ...(prefsA?.interests || [])]);
+    const interestsB = new Set([...(userB.interests || []), ...(prefsB?.interests || [])]);
+    const interestOverlap = [...interestsA].filter((i) => interestsB.has(i));
     if (interestOverlap.length > 0) {
       const overlapRatio = interestOverlap.length / Math.max(interestsA.size, interestsB.size, 1);
       score += Math.round(30 * overlapRatio);
-      reasons.push(...interestOverlap.map(i => `Interest: ${i}`));
+      reasons.push(...interestOverlap.map((i) => `Interest: ${i}`));
     }
 
     // Language overlap (weight: 25)
-    const langsA = new Set([...(userA.languages || []), ...(prefsA.languages || [])]);
-    const langsB = new Set([...(userB.languages || []), ...(prefsB.languages || [])]);
-    const langOverlap = [...langsA].filter(l => langsB.has(l));
+    const langsA = new Set([...(userA.languages || []), ...(prefsA?.languages || [])]);
+    const langsB = new Set([...(userB.languages || []), ...(prefsB?.languages || [])]);
+    const langOverlap = [...langsA].filter((l) => langsB.has(l));
     if (langOverlap.length > 0) {
       const overlapRatio = langOverlap.length / Math.max(langsA.size, langsB.size, 1);
       score += Math.round(25 * overlapRatio);
-      reasons.push(...langOverlap.map(l => `Language: ${l}`));
+      reasons.push(...langOverlap.map((l) => `Language: ${l}`));
     }
 
     // Game tags overlap (weight: 20)
-    const gamesA = new Set([...(userA.gameTags || []), ...(prefsA.gameTags || [])]);
-    const gamesB = new Set([...(userB.gameTags || []), ...(prefsB.gameTags || [])]);
-    const gameOverlap = [...gamesA].filter(g => gamesB.has(g));
+    const gamesA = new Set([...(userA.gameTags || []), ...(prefsA?.gameTags || [])]);
+    const gamesB = new Set([...(userB.gameTags || []), ...(prefsB?.gameTags || [])]);
+    const gameOverlap = [...gamesA].filter((g) => gamesB.has(g));
     if (gameOverlap.length > 0) {
       const overlapRatio = gameOverlap.length / Math.max(gamesA.size, gamesB.size, 1);
       score += Math.round(20 * overlapRatio);
-      reasons.push(...gameOverlap.map(g => `Game: ${g}`));
+      reasons.push(...gameOverlap.map((g) => `Game: ${g}`));
     }
 
     // Hobby tags overlap (weight: 15)
-    const hobbiesA = new Set([...(userA.hobbyTags || []), ...(prefsA.hobbyTags || [])]);
-    const hobbiesB = new Set([...(userB.hobbyTags || []), ...(prefsB.hobbyTags || [])]);
-    const hobbyOverlap = [...hobbiesA].filter(h => hobbiesB.has(h));
+    const hobbiesA = new Set([...(userA.hobbyTags || []), ...(prefsA?.hobbyTags || [])]);
+    const hobbiesB = new Set([...(userB.hobbyTags || []), ...(prefsB?.hobbyTags || [])]);
+    const hobbyOverlap = [...hobbiesA].filter((h) => hobbiesB.has(h));
     if (hobbyOverlap.length > 0) {
       const overlapRatio = hobbyOverlap.length / Math.max(hobbiesA.size, hobbiesB.size, 1);
       score += Math.round(15 * overlapRatio);
-      reasons.push(...hobbyOverlap.map(h => `Hobby: ${h}`));
+      reasons.push(...hobbyOverlap.map((h) => `Hobby: ${h}`));
     }
 
     // Topic tags overlap (weight: 10)
-    const topicsA = new Set([...(userA.topicTags || []), ...(prefsA.topicTags || [])]);
-    const topicsB = new Set([...(userB.topicTags || []), ...(prefsB.topicTags || [])]);
-    const topicOverlap = [...topicsA].filter(t => topicsB.has(t));
+    const topicsA = new Set([...(userA.topicTags || []), ...(prefsA?.topicTags || [])]);
+    const topicsB = new Set([...(userB.topicTags || []), ...(prefsB?.topicTags || [])]);
+    const topicOverlap = [...topicsA].filter((t) => topicsB.has(t));
     if (topicOverlap.length > 0) {
       const overlapRatio = topicOverlap.length / Math.max(topicsA.size, topicsB.size, 1);
       score += Math.round(10 * overlapRatio);
-      reasons.push(...topicOverlap.map(t => `Topic: ${t}`));
+      reasons.push(...topicOverlap.map((t) => `Topic: ${t}`));
     }
 
-    return { score: Math.min(score, maxScore), reasons };
+    const categoryCounts = {
+      interests: interestOverlap.length,
+      languages: langOverlap.length,
+      games: gameOverlap.length,
+      hobbies: hobbyOverlap.length,
+      topics: topicOverlap.length,
+    };
+
+    const overlapCount =
+      interestOverlap.length +
+      langOverlap.length +
+      gameOverlap.length +
+      hobbyOverlap.length +
+      topicOverlap.length;
+
+    return {
+      score: Math.min(score, maxScore),
+      overlapCount,
+      categoryCounts,
+      reasons,
+    };
   }
 
   /**
@@ -434,22 +477,25 @@ export class PrivacyService {
     const interestResult = this.calculateInterestScore(prefsA, prefsB, userA, userB);
     const ageResult = this.calculateAgeScore(prefsA, prefsB, userA, userB);
 
+    // Hard min-interest gate
+    const requiresInterestMatch = (prefsA?.enableInterestMatch ?? true) && (prefsB?.enableInterestMatch ?? true);
+    if (requiresInterestMatch) {
+      const minOverlap = Math.max(prefsA?.minInterestOverlap ?? 1, prefsB?.minInterestOverlap ?? 1);
+      if (interestResult.overlapCount < minOverlap) {
+        return {
+          allowed: false,
+          score: 0,
+          reasons: [`Insufficient shared interests (${interestResult.overlapCount}/${minOverlap} required)`],
+        };
+      }
+    }
+
     const totalScore = interestResult.score + ageResult.score;
     const allReasons = [...interestResult.reasons];
     if (ageResult.reason) allReasons.push(ageResult.reason);
 
-    // Check minimum overlap requirement
-    const minOverlap = Math.max(prefsA?.minInterestOverlap ?? 1, prefsB?.minInterestOverlap ?? 1);
-    const overlapCount = interestResult.reasons.length;
-
-    // Allow if: score > 0 OR both have no preferences set (fallback to random)
-    const hasPreferences = (prefsA?.interests?.length ?? 0) + (prefsA?.languages?.length ?? 0) + (prefsA?.gameTags?.length ?? 0) + (prefsA?.hobbyTags?.length ?? 0) + (prefsA?.topicTags?.length ?? 0) > 0 ||
-                           (prefsB?.interests?.length ?? 0) + (prefsB?.languages?.length ?? 0) + (prefsB?.gameTags?.length ?? 0) + (prefsB?.hobbyTags?.length ?? 0) + (prefsB?.topicTags?.length ?? 0) > 0;
-
-    const allowed = !hasPreferences || totalScore > 0 || overlapCount >= minOverlap;
-
     return {
-      allowed,
+      allowed: true,
       score: totalScore,
       reasons: allReasons,
     };
