@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { safetyEngine } from '@/lib/safety/engine';
 import { getPrismaClient } from '@/lib/db/prisma';
+import { auth } from '@/lib/auth/config';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized: Moderator access required' }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { reportId, action, moderatorNotes, moderatorId = 'admin_mod_1' } = body;
+    const { reportId, action, moderatorNotes } = body;
+    const moderatorId = session.user.id;
 
     if (!reportId || !action) {
       return NextResponse.json({ error: 'Missing reportId or action' }, { status: 400 });

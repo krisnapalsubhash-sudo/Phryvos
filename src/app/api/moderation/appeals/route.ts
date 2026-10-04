@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getPrismaClient } from '@/lib/db/prisma';
+import { auth } from '@/lib/auth/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,11 @@ const memoryAppeals: InMemAppeal[] = [];
 
 export async function GET(req: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status');
 
@@ -61,12 +67,19 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await req.json();
-    const { action = 'SUBMIT', appealId, userId, reason, decision, moderatorResponse, moderatorId } = body;
+    const { action = 'SUBMIT', appealId, reason, decision, moderatorResponse } = body;
+    const userId = session.user.id;
+    const moderatorId = session.user.id;
 
     if (action === 'SUBMIT') {
-      if (!userId || !reason) {
-        return NextResponse.json({ error: 'Missing userId or reason for appeal' }, { status: 400 });
+      if (!reason) {
+        return NextResponse.json({ error: 'Missing reason for appeal' }, { status: 400 });
       }
 
       const newAppeal: InMemAppeal = {

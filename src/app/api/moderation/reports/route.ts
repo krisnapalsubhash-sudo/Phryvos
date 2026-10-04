@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { safetyEngine, type ReportStatus, type ReportSeverity } from '@/lib/safety/engine';
 import { getPrismaClient } from '@/lib/db/prisma';
+import { auth } from '@/lib/auth/config';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status') as ReportStatus | null;
     const severity = searchParams.get('severity') as ReportSeverity | null;
@@ -67,12 +73,18 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { reporterId, reportedUserId, reason, category, evidenceContext, isMinorInvolved } = body;
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    if (!reporterId || !reportedUserId || !reason) {
+    const body = await req.json();
+    const { reportedUserId, reason, category, evidenceContext, isMinorInvolved } = body;
+    const reporterId = session.user.id;
+
+    if (!reportedUserId || !reason) {
       return NextResponse.json(
-        { error: 'Missing reporterId, reportedUserId, or reason' },
+        { error: 'Missing reportedUserId or reason' },
         { status: 400 }
       );
     }
