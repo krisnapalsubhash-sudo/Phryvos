@@ -33,7 +33,7 @@
 
 5. **Deploy the app**:
    ```bash
-   cd /root/projects/ideavo
+   cd /root/projects/phryvos
    bun run build
    bun run start --port 4000
    ```
@@ -42,7 +42,7 @@
 
 ```bash
 # Build and run with Docker
-cd /root/projects/ideavo
+cd /root/projects/phryvos
 docker build -t phryvos .
 docker run -d -p 4000:4000 --name phryvos phryvos
 
@@ -52,7 +52,7 @@ docker run -d -p 4000:4000 --name phryvos phryvos
 ### Option 3: Use the Deploy Script
 
 ```bash
-cd /root/projects/ideavo
+cd /root/projects/phryvos
 ./deploy.sh
 ```
 

@@ -58,9 +58,9 @@ pkill -f "next start"
 pkill -f "cloudflared tunnel"
 
 # Start services again
-cd /root/projects/ideavo
+cd /root/projects/phryvos
 nohup npx next start --port 4000 > /tmp/phryvos.log 2>&1 &
-nohup cloudflared tunnel --config /root/projects/ideavo/cloudflared-config.yml run > /tmp/cloudflared.log 2>&1 &
+nohup cloudflared tunnel --config /root/projects/phryvos/cloudflared-config.yml run > /tmp/cloudflared.log 2>&1 &
 
 # View logs
 tail -f /tmp/phryvos.log

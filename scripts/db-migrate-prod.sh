@@ -13,10 +13,10 @@ echo "🚀 Phryvos Production Database Migration Runner"
 echo "======================================================"
 
 if [ -z "${DATABASE_URL:-}" ]; then
-  if [ -f /root/projects/ideavo/.env.local ]; then
-    export $(grep -v '^#' /root/projects/ideavo/.env.local | grep DATABASE_URL | xargs -d '\n' || true)
-  elif [ -f /root/projects/ideavo/.env ]; then
-    export $(grep -v '^#' /root/projects/ideavo/.env | grep DATABASE_URL | xargs -d '\n' || true)
+  if [ -f /root/projects/phryvos/.env.local ]; then
+    export $(grep -v '^#' /root/projects/phryvos/.env.local | grep DATABASE_URL | xargs -d '\n' || true)
+  elif [ -f /root/projects/phryvos/.env ]; then
+    export $(grep -v '^#' /root/projects/phryvos/.env | grep DATABASE_URL | xargs -d '\n' || true)
   fi
 fi
 

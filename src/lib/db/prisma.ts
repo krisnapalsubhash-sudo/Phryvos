@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import '@/env'; // Validate environment variables
+import { env } from '@/env'; // Validate environment variables
 
 // Prevent multiple instances of Prisma Client in development / serverless reloads
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
@@ -38,7 +38,7 @@ export function getPrismaClient(): PrismaClient {
   }
 
   // Production and Runtime initialization
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl && process.env.NODE_ENV === 'production') {
     console.error('FATAL: DATABASE_URL environment variable is missing in production runtime.');
   }

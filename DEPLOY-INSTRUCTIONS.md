@@ -3,7 +3,7 @@
 ## ✅ Current Status
 
 Your Phryvos app is **built and ready**:
-- Production build: `/root/projects/ideavo/.next/` (192MB)
+- Production build: `/root/projects/phryvos/.next/` (192MB)
 - Local server: http://localhost:4000 ✓
 - Cloudflare Tunnel: Created and authenticated ✓
 
@@ -49,7 +49,7 @@ Go to Cloudflare Dashboard → Your Domain (phryvos.in) → DNS → Add Record:
 
 **Step 2: Update Tunnel Config**
 
-The config file is at: `/root/projects/ideavo/cloudflared-config.yml`
+The config file is at: `/root/projects/phryvos/cloudflared-config.yml`
 
 Make sure it contains:
 ```yaml
@@ -71,7 +71,7 @@ ingress:
 pkill -f "cloudflared tunnel"
 
 # Start with config
-cd /root/projects/ideavo
+cd /root/projects/phryvos
 nohup cloudflared tunnel --config cloudflared-config.yml run > /tmp/cloudflared.log 2>&1 &
 
 # Verify
@@ -92,7 +92,7 @@ dig www.phryvos.in +short
 I've created a deployment script. Run it:
 
 ```bash
-cd /root/projects/ideavo
+cd /root/projects/phryvos
 ./deploy.sh
 ```
 
@@ -138,7 +138,7 @@ cloudflared tunnel list
 cloudflared tunnel info phryvos-tunnel
 
 # Restart everything
-cd /root/projects/ideavo && ./deploy.sh
+cd /root/projects/phryvos && ./deploy.sh
 ```
 
 ---

@@ -63,14 +63,14 @@ cloudflared tunnel --name phryvos run
 **Open a NEW terminal/tab** and start the app:
 
 ```bash
-cd /root/projects/ideavo
+cd /root/projects/phryvos
 bun run start --port 4000
 ```
 
 **Or use one command** (run in background):
 
 ```bash
-cd /root/projects/ideavo
+cd /root/projects/phryvos
 nohup bun run start --port 4000 > /tmp/phryvos.log 2>&1 &
 cloudflared tunnel --name phryvos run
 ```

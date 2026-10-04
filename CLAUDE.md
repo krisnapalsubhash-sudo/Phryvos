@@ -1,7 +1,7 @@
 # Phryvos Next.js — AI Assistant Context
 
 ## Project Overview
-Phryvos is a global social discovery platform (formerly "Ideavo") built with Next.js 15, React 19, TypeScript, and Tailwind CSS v3. The core feature is real-time stranger matching via a "Radar" interface with SSE-based matchmaking.
+Phryvos is a global social discovery platform (formerly "Phryvos") built with Next.js 15, React 19, TypeScript, and Tailwind CSS v3. The core feature is real-time stranger matching via a "Radar" interface with SSE-based matchmaking.
 
 ## Architecture
 
@@ -48,7 +48,7 @@ Phryvos is a global social discovery platform (formerly "Ideavo") built with Nex
   - Custom border-radius: `br-xs`, `bl-xs`
 
 ## Branding
-- **Canonical name**: "Phryvos" (not "Ideavo")
+- **Canonical name**: "Phryvos" (not "Phryvos")
 - **Tagline**: "Where Strangers Become Stories"
 - **Gradient**: `#3B82F6 → #6366F1 → #8B5CF6`
 

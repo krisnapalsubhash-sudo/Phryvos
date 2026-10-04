@@ -39,9 +39,9 @@ yarn-error.log*
 bun-debug.log*
 pnpm-debug.log*
 lerna-debug.log*
-ideavo-server.log
-ideavo-build.log
-.ideavo-attachments
+phryvos-server.log
+phryvos-build.log
+.phryvos-attachments
 
 # environment variables
 .env
@@ -111,8 +111,8 @@ $RECYCLE.BIN/
 # local files
 .local
 
-# Ideavo specific
-.ideavo/project
+# Phryvos specific
+.phryvos/project
 # next-agents-md
 .next-docs/
 

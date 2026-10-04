@@ -12,7 +12,7 @@ if pgrep -f "next start" > /dev/null; then
     echo "✓ Next.js server is already running"
 else
     echo "Starting Next.js production server..."
-    cd /root/projects/ideavo
+    cd /root/projects/phryvos
     nohup npx next start --port 4000 > /tmp/phryvos.log 2>&1 &
     sleep 3
 fi
@@ -22,7 +22,7 @@ if pgrep -f "cloudflared tunnel" > /dev/null; then
     echo "✓ Cloudflare Tunnel is already running"
 else
     echo "Starting Cloudflare Tunnel..."
-    nohup cloudflared tunnel --config /root/projects/ideavo/cloudflared-config.yml run > /tmp/cloudflared.log 2>&1 &
+    nohup cloudflared tunnel --config /root/projects/phryvos/cloudflared-config.yml run > /tmp/cloudflared.log 2>&1 &
     sleep 5
 fi
 

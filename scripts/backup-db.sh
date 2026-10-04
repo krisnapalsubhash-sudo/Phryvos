@@ -8,7 +8,7 @@
 
 set -euo pipefail
 
-BACKUP_DIR="${BACKUP_DIR:-/root/projects/ideavo/backups/db}"
+BACKUP_DIR="${BACKUP_DIR:-/root/projects/phryvos/backups/db}"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 BACKUP_FILE="${BACKUP_DIR}/phryvos_backup_${TIMESTAMP}.sql.gz"
 CHECKSUM_FILE="${BACKUP_FILE}.sha256"
@@ -17,10 +17,10 @@ RETENTION_DAYS=14
 mkdir -p "${BACKUP_DIR}"
 
 if [ -z "${DATABASE_URL:-}" ]; then
-  if [ -f /root/projects/ideavo/.env.local ]; then
-    export $(grep -v '^#' /root/projects/ideavo/.env.local | grep DATABASE_URL | xargs -d '\n' || true)
-  elif [ -f /root/projects/ideavo/.env ]; then
-    export $(grep -v '^#' /root/projects/ideavo/.env | grep DATABASE_URL | xargs -d '\n' || true)
+  if [ -f /root/projects/phryvos/.env.local ]; then
+    export $(grep -v '^#' /root/projects/phryvos/.env.local | grep DATABASE_URL | xargs -d '\n' || true)
+  elif [ -f /root/projects/phryvos/.env ]; then
+    export $(grep -v '^#' /root/projects/phryvos/.env | grep DATABASE_URL | xargs -d '\n' || true)
   fi
 fi
 

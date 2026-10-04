@@ -93,19 +93,19 @@ const fullLogoBox = {
 };
 
 // Ensure directories exist
-fs.mkdirSync('/root/projects/ideavo/public/brand', { recursive: true });
+fs.mkdirSync('/root/projects/phryvos/public/brand', { recursive: true });
 
 // Export variations to public
-cropAndResize(appTileBox, 512, 512, '/root/projects/ideavo/public/brand/app-icon-512.png');
-cropAndResize(appTileBox, 192, 192, '/root/projects/ideavo/public/brand/app-icon-192.png');
-cropAndResize(glowingIconBox, 512, 512, '/root/projects/ideavo/public/brand/logo-icon-512.png');
-cropAndResize(glowingIconBox, 192, 192, '/root/projects/ideavo/public/brand/logo-icon-192.png');
-cropAndResize(fullLogoBox, 1200, 333, '/root/projects/ideavo/public/brand/logo-full.png');
+cropAndResize(appTileBox, 512, 512, '/root/projects/phryvos/public/brand/app-icon-512.png');
+cropAndResize(appTileBox, 192, 192, '/root/projects/phryvos/public/brand/app-icon-192.png');
+cropAndResize(glowingIconBox, 512, 512, '/root/projects/phryvos/public/brand/logo-icon-512.png');
+cropAndResize(glowingIconBox, 192, 192, '/root/projects/phryvos/public/brand/logo-icon-192.png');
+cropAndResize(fullLogoBox, 1200, 333, '/root/projects/phryvos/public/brand/logo-full.png');
 
 // Copy primary icon to public/icon-512.png, icon-192.png, and logo.png
-fs.copyFileSync('/root/projects/ideavo/public/brand/logo-icon-512.png', '/root/projects/ideavo/public/icon-512.png');
-fs.copyFileSync('/root/projects/ideavo/public/brand/logo-icon-192.png', '/root/projects/ideavo/public/icon-192.png');
-fs.copyFileSync('/root/projects/ideavo/public/brand/logo-icon-512.png', '/root/projects/ideavo/public/logo.png');
-fs.copyFileSync('/root/projects/ideavo/public/brand/logo-icon-192.png', '/root/projects/ideavo/public/favicon.ico');
+fs.copyFileSync('/root/projects/phryvos/public/brand/logo-icon-512.png', '/root/projects/phryvos/public/icon-512.png');
+fs.copyFileSync('/root/projects/phryvos/public/brand/logo-icon-192.png', '/root/projects/phryvos/public/icon-192.png');
+fs.copyFileSync('/root/projects/phryvos/public/brand/logo-icon-512.png', '/root/projects/phryvos/public/logo.png');
+fs.copyFileSync('/root/projects/phryvos/public/brand/logo-icon-192.png', '/root/projects/phryvos/public/favicon.ico');
 
 console.log('✅ All logo assets generated and copied to public/!');

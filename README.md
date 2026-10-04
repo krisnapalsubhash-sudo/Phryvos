@@ -7,10 +7,10 @@ A global social discovery & human connection platform. Connect through radar, re
 - **Framework**: Next.js 15.5 (App Router)
 - **Linguagem**: TypeScript (strict mode)
 - **Estilização**: Tailwind CSS v3 + Custom Design System (CSS Variables)
-- **Estado**: Zustand v5 (persistido em localStorage)
+- **Estado**: Zustand v4.5.2 (persistido em localStorage)
 - **Animações**: Framer Motion
 - **UI Components**: shadcn/ui + Radix UI (via `radix-ui` meta-package)
-- **Forms**: React Hook Form + Zod v4
+- **Forms**: React Hook Form + Zod v3.22.4
 - **Realtime**: Server-Sent Events (SSE)
 - **Package Manager**: pnpm
 
@@ -61,7 +61,7 @@ A global social discovery & human connection platform. Connect through radar, re
 ## Como Rodar (Desenvolvimento)
 
 ```bash
-cd /root/projects/ideavo
+cd /root/projects/phryvos
 pnpm install
 pnpm run dev --port 4000
 ```
@@ -106,8 +106,8 @@ cp .env.example .env.local
 ## Próximos Passos (Roadmap)
 
 - [ ] Migrar realtime engine para Redis (escala horizontal)
-- [ ] Adicionar autenticação real com NextAuth.js
-- [ ] Adicionar banco de dados PostgreSQL com Prisma
+- [x] Adicionar autenticação real com NextAuth.js
+- [x] Adicionar banco de dados PostgreSQL com Prisma
 - [ ] Testes unitários (Vitest) para safety/realtime engines
 - [ ] Testes de integração para API routes
 - [ ] Substituir dados mock por API + seed de desenvolvimento

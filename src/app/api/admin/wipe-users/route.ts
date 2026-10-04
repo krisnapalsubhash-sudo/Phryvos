@@ -1,3 +1,4 @@
+import { env } from "@/env";
 import { NextRequest, NextResponse } from 'next/server';
 import { getPrismaClient } from '@/lib/db/prisma';
 
@@ -5,7 +6,7 @@ import { getPrismaClient } from '@/lib/db/prisma';
 // REMOVE THIS FILE after use!
 export async function POST(request: NextRequest) {
   const secret = request.headers.get('x-admin-secret');
-  if (secret !== process.env.NEXTAUTH_SECRET) {
+  if (secret !== env.NEXTAUTH_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

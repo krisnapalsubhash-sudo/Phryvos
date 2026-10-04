@@ -2,7 +2,7 @@ import os
 import zipfile
 import time
 
-SRC_DIR = "/root/projects/ideavo"
+SRC_DIR = "/root/projects/phryvos"
 OUT_ZIP = "/storage/emulated/0/phryvos/phryvos v1.0.0.2.zip"
 
 EXCLUDE_DIRS = {

@@ -52,6 +52,6 @@ echo ""
 cat "$OUTPUT_FILE"
 
 # Also create a versioned copy in the root
-cp "$OUTPUT_FILE" "/root/projects/ideavo/checksums_${VERSION}.txt" 2>/dev/null || true
+cp "$OUTPUT_FILE" "/root/projects/phryvos/checksums_${VERSION}.txt" 2>/dev/null || true
 echo ""
 echo "📋 Copy saved to project root"

@@ -26,7 +26,7 @@
 
 **终端 1 - 启动 Next.js：**
 ```bash
-cd /root/projects/ideavo
+cd /root/projects/phryvos
 npx next start --port 4000
 ```
 
@@ -61,7 +61,7 @@ https://something-random.trycloudflare.com
 
 ```bash
 # 终端 1：Next.js
-cd /root/projects/ideavo && npx next start --port 4000
+cd /root/projects/phryvos && npx next start --port 4000
 
 # 终端 2：Cloudflare Tunnel（使用已有配置）
 cloudflared tunnel run phryvos-tunnel
