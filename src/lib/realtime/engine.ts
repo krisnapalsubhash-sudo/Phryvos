@@ -34,6 +34,7 @@ export class RealtimeServerEngine {
   private matchQueue: MatchQueueEntry[] = [];
   private activeRooms: Map<string, EnhancedRealtimeRoom> = new Map();
   private archivedRooms: Map<string, EnhancedRealtimeRoom> = new Map();
+  private idempotencyCache: Map<string, { message: RealtimeMessage; timestamp: number }> = new Map();
 
   // Register client SSE stream with connectionId guard (supports both 3-arg test/legacy calls and 4-arg guarded calls)
   public registerClient(userId: string, user: RealtimeUser, controller: ReadableStreamDefaultController): void;
@@ -300,7 +301,8 @@ export class RealtimeServerEngine {
     sender: RealtimeUser,
     text: string,
     type: 'text' | 'image' | 'voice' = 'text',
-    clientIp?: string
+    clientIp?: string,
+    idempotencyKey?: string
   ): {
     success: boolean;
     message?: RealtimeMessage;
@@ -319,6 +321,27 @@ export class RealtimeServerEngine {
     const room = this.activeRooms.get(roomId);
     if (!room) {
       return { success: false, error: 'Orbit closed or room not found' };
+    }
+
+    // Idempotency verification: deduplicate retried messages within same room and sender scope
+    if (idempotencyKey) {
+      const scopeKey = `${roomId}:${sender.id}:${idempotencyKey}`;
+      const cached = this.idempotencyCache.get(scopeKey);
+      if (cached && Date.now() - cached.timestamp < 10 * 60 * 1000) {
+        return {
+          success: true,
+          message: cached.message,
+          id: cached.message.id,
+          roomId: cached.message.roomId,
+          senderId: cached.message.senderId,
+          senderName: cached.message.senderName,
+          senderAvatar: cached.message.senderAvatar,
+          text: cached.message.text,
+          type: cached.message.type,
+          timestamp: cached.message.timestamp,
+          status: cached.message.status,
+        };
+      }
     }
 
     // Server-side multi-dimensional rate limit check
@@ -368,6 +391,17 @@ export class RealtimeServerEngine {
     room.status = 'ACTIVE';
     room.updatedAt = new Date().toISOString();
     room.messages.push(message);
+
+    if (idempotencyKey) {
+      const scopeKey = `${roomId}:${sender.id}:${idempotencyKey}`;
+      this.idempotencyCache.set(scopeKey, { message, timestamp: Date.now() });
+      if (this.idempotencyCache.size > 5000) {
+        const cutoff = Date.now() - 10 * 60 * 1000;
+        for (const [k, v] of this.idempotencyCache.entries()) {
+          if (v.timestamp < cutoff) this.idempotencyCache.delete(k);
+        }
+      }
+    }
 
     // Broadcast to room members
     this.emitToRoom(roomId, 'chat_message', message);

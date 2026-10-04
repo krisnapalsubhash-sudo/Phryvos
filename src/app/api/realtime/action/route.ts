@@ -60,6 +60,7 @@ const RealtimeActionSchema = z.discriminatedUnion('action', [
     userMeta: UserMetaInputSchema,
     text: z.string().min(1, 'Message text cannot be empty').max(1000, 'Message text exceeds 1000 characters'),
     type: z.enum(['text', 'image', 'voice']).optional(),
+    idempotencyKey: z.string().max(128).optional(),
   }),
   z.object({
     action: z.literal('typing'),
@@ -317,13 +318,14 @@ export async function POST(req: NextRequest) {
       }
 
       case 'send_message': {
-        const { roomId, text, type } = body;
+        const { roomId, text, type, idempotencyKey } = body;
         const result = realtimeEngine.sendMessage(
           roomId,
           actingUserMeta,
           text.trim(),
           type || 'text',
-          clientIp
+          clientIp,
+          idempotencyKey
         );
 
         if (!result.success) {
