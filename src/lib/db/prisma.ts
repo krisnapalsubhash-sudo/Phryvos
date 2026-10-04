@@ -12,31 +12,6 @@ export function getPrismaClient(): PrismaClient {
     return globalForPrisma.prisma;
   }
 
-  // Guard: Strictly isolate build-phase prerendering from production runtime
-  const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
-
-  if (isBuildPhase) {
-    // If during static build with no database, provide a diagnostic-aware Proxy
-    // that informs developers rather than failing silently with undefined TypeError
-    const buildProxy = new Proxy({} as PrismaClient, {
-      get(_target, prop) {
-        if (prop === 'then' || prop === 'catch' || prop === 'finally') {
-          return undefined;
-        }
-        // Provide a mock for any model access
-        return new Proxy(() => {}, {
-          get(_t, subProp) {
-            return () => Promise.resolve(null);
-          },
-          apply() {
-            return Promise.resolve(null);
-          },
-        });
-      },
-    });
-    return buildProxy;
-  }
-
   // Production and Runtime initialization
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) {
