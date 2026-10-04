@@ -99,7 +99,7 @@ export async function GET(
         followers: user._count.connectedBy,
         following: user._count.connections,
         postsCount: user._count.posts,
-        isOnline: user.isOnline,
+        isOnline: Boolean(user.isOnline && user.lastSeen && (Date.now() - user.lastSeen.getTime()) < 5 * 60 * 1000),
         lastSeen: user.lastSeen?.toISOString() || null,
         createdAt: user.createdAt.toISOString(),
         isFollowing,

@@ -1,12 +1,35 @@
 import { z } from 'zod';
 
-// Username: 3-20 chars, alphanumeric + underscore, must start with letter
+const RESERVED_USERNAMES = new Set([
+  'admin',
+  'administrator',
+  'root',
+  'phryvos',
+  'support',
+  'system',
+  'moderator',
+  'mod',
+  'help',
+  'official',
+  'security',
+  'staff',
+  'api',
+  'dev',
+  'me',
+  'null',
+  'undefined',
+]);
+
+// Username: 3-20 chars, alphanumeric + underscore, must start with letter, cannot be reserved
 export const usernameSchema = z
   .string()
   .min(3, 'Username must be at least 3 characters')
   .max(20, 'Username must be at most 20 characters')
   .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, 'Username must start with a letter and contain only letters, numbers, and underscores')
-  .toLowerCase();
+  .transform((val) => val.toLowerCase().trim())
+  .refine((val) => !RESERVED_USERNAMES.has(val), {
+    message: 'This username is reserved and cannot be used',
+  });
 
 // Email: normalize, validate format
 export const emailSchema = z
@@ -100,11 +123,24 @@ export const createCommentSchema = z.object({
 
 // Profile update schema
 export const updateProfileSchema = z.object({
-  displayName: z.string().min(1).max(50).optional(),
-  bio: z.string().max(160).optional(),
-  location: z.string().max(100).optional(),
-  avatar: z.string().max(10).optional(),
-  cover: z.string().max(100).optional(),
+  displayName: z
+    .string()
+    .min(1)
+    .max(50)
+    .transform((val) => val.replace(/<[^>]*>?/gm, '').trim())
+    .optional(),
+  bio: z
+    .string()
+    .max(160)
+    .transform((val) => val.replace(/<[^>]*>?/gm, '').trim())
+    .optional(),
+  location: z
+    .string()
+    .max(100)
+    .transform((val) => val.replace(/<[^>]*>?/gm, '').trim())
+    .optional(),
+  avatar: z.string().max(255).optional(),
+  cover: z.string().max(255).optional(),
   interests: z.array(z.string().max(30)).max(8).optional(),
   website: z.string().url('Invalid URL').max(200).optional().nullable(),
 });

@@ -124,6 +124,7 @@ export async function GET(request: NextRequest) {
       success: true,
       users: usersWithConnection.map((u) => ({
         ...u,
+        isOnline: Boolean(u.isOnline && u.lastSeen && (Date.now() - u.lastSeen.getTime()) < 5 * 60 * 1000),
         createdAt: u.createdAt.toISOString(),
         lastSeen: u.lastSeen?.toISOString() || null,
       })),
