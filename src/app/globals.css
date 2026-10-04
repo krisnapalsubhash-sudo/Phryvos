@@ -128,3 +128,48 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted-foreground);
 }
+
+/* ============================================================
+   GPU ACCELERATED AURORA & PERFORMANCE OPTIMIZATIONS
+   Runs completely on the compositor thread for 60-120 FPS
+============================================================ */
+
+@keyframes aurora-slow {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(24px, -28px, 0) scale(1.05);
+  }
+}
+
+@keyframes aurora-reverse {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(-26px, 22px, 0) scale(0.96);
+  }
+}
+
+.animate-aurora-slow {
+  animation: aurora-slow 22s ease-in-out infinite;
+}
+
+.animate-aurora-reverse {
+  animation: aurora-reverse 26s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-aurora-slow,
+  .animate-aurora-reverse {
+    animation: none;
+  }
+}
+
+/* Hardware accelerated layer promotion for cards */
+.glass-panel {
+  transform: translateZ(0);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
