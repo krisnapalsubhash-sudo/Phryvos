@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <title>Offline — Phryvos</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #000000;
+      --fg: #ffffff;
+      --muted: #888888;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59, 130, 246, 0.4);
+      --card: #111111;
+      --border: #2a2a2a;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #fafafa;
+        --fg: #111111;
+        --muted: #666666;
+        --accent: #3b82f6;
+        --accent-glow: rgba(59, 130, 246, 0.3);
+        --card: #ffffff;
+        --border: #e5e5e5;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 400px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .logo {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      box-shadow: 0 0 40px var(--accent-glow);
+      animation: pulse 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 40px var(--accent-glow); }
+      50% { box-shadow: 0 0 60px var(--accent-glow), 0 0 80px var(--accent-glow); }
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #3b82f6 0%, #6366f1 50%, #8b5cf6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 16px;
+      margin-bottom: 32px;
+      max-width: 320px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .status-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .status-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px;
+      background: var(--border);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+
+    .status-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .status-message {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+      color: white;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px var(--accent-glow);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background: var(--card);
+      color: var(--fg);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--border);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 32px;
+    }
+
+    .feature {
+      padding: 16px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+
+    .feature-icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+    }
+
+    .feature-label {
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .retry-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--accent);
+      font-size: 14px;
+      margin-top: 16px;
+      animation: blink 1.5s ease-in-out infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .retry-indicator::before {
+      content: '';
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse-dot 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.3); }
+    }
+
+    @media (max-width: 480px) {
+      .features {
+        grid-template-columns: 1fr;
+      }
+
+      .btn-group {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .btn {
+        justify-content: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">✦</div>
+
+    <h1>You're Offline</h1>
+    <p class="subtitle">
+      No internet connection detected. Some features may be unavailable, but you can still browse cached content.
+    </p>
+
+    <div class="status-card">
+      <div class="status-icon">📡</div>
+      <div class="status-title">Connection Lost</div>
+      <div class="status-message">
+        Phryvos works best online. Your likes, posts, and messages will sync automatically when you reconnect.
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="retryConnection()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M23 4v6h-6"/>
+            <path d="M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          Try Again
+        </button>
+        <a href="/radar" class="btn btn-secondary">View Cached Radar</a>
+      </div>
+    </div>
+
+    <div class="retry-indicator" id="retryIndicator" style="display: none;">
+      Checking connection...
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="feature-icon">🌌</div>
+        <div class="feature-label">Radar</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">💬</div>
+        <div class="feature-label">Chat</div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">📖</div>
+        <div class="feature-label">Feed</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Check for service worker and online status
+    let isOnline = navigator.onLine;
+    const retryIndicator = document.getElementById('retryIndicator');
+
+    function updateOnlineStatus() {
+      isOnline = navigator.onLine;
+      if (isOnline) {
+        retryIndicator.style.display = 'inline-flex';
+        retryIndicator.textContent = 'Back online! Redirecting...';
+        retryIndicator.style.color = '#22c55e';
+
+        // Try to reload the original page
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        retryIndicator.style.display = 'none';
+      }
+    }
+
+    function retryConnection() {
+      retryIndicator.style.display = 'inline-flex';
+      retryIndicator.textContent = 'Checking connection...';
+      retryIndicator.style.color = '#3b82f6';
+
+      // Force a network request to test connectivity
+      fetch('/manifest.json', { method: 'HEAD', cache: 'no-cache' })
+        .then(() => {
+          updateOnlineStatus();
+        })
+        .catch(() => {
+          retryIndicator.textContent = 'Still offline. Retrying in 5s...';
+          retryIndicator.style.color = '#ef4444';
+          setTimeout(retryConnection, 5000);
+        });
+    }
+
+    // Listen for online/offline events
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+
+    // Check if service worker is controlling this page
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((registration) => {
+        console.log('[Offline] SW ready:', registration.scope);
+      }).catch((err) => {
+        console.log('[Offline] SW not ready:', err);
+      });
+    }
+
+    // Auto-retry on load
+    if (!isOnline) {
+      retryConnection();
+    }
+  </script>
+</body>
+</html>

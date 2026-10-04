@@ -1,0 +1,521 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PostFormat {
+  STANDARD
+  RAW
+  VOICE
+  MIDNIGHT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VOICE
+  EMOJI
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  INAPPROPRIATE_CONTENT
+  FAKE_PROFILE
+  SCAM
+  OTHER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  username      String    @unique
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String
+  displayName   String
+  bio           String    @default("")
+  avatar        String    @default("😊")
+  cover         String?
+  interests     String[]  @default([])
+  location      String    @default("")
+  followers     Int       @default(0)
+  following     Int       @default(0)
+  postsCount    Int       @default(0)
+  isOnline      Boolean   @default(false)
+  lastSeen      DateTime?
+  onboardingCompleted Boolean @default(false)
+  demoMode      Boolean   @default(false)
+  role          String    @default("USER") // USER, MODERATOR, ADMIN
+  ageGroup      String    @default("UNVERIFIED") // MINOR_TEEN (13-17), ADULT (18+), UNVERIFIED
+  birthDate     DateTime?
+  isBanned      Boolean   @default(false)
+  banReason     String?
+  isSuspended   Boolean   @default(false)
+  suspendedUntil DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  posts         Post[]
+  comments      Comment[]
+  likes         Like[]
+  sentMessages  Message[]         @relation("SentMessages")
+  receivedMessages Message[]       @relation("ReceivedMessages")
+  conversations ConversationParticipant[]
+  connections   Connection[]      @relation("UserConnections")
+  connectedBy   Connection[]      @relation("ConnectedUsers")
+  sentReports           Report[]              @relation("SentReports")
+  receivedReports       Report[]              @relation("ReceivedReports")
+  blocks                Block[]               @relation("BlockedUsers")
+  blockedBy             Block[]               @relation("BlockingUsers")
+  stories               Story[]
+  media                 Media[]
+  notifications         Notification[]        @relation("UserNotifications")
+  actedNotifications    Notification[]        @relation("ActorNotifications")
+  sentMessageRequests   MessageRequest[]      @relation("SentMessageRequests")
+  receivedMessageRequests MessageRequest[]    @relation("ReceivedMessageRequests")
+  matchPreference       MatchPreference?
+  skipHistory           SkipHistory[]
+  gameMoves             GameMove[]
+  timeCapsulesCreated   TimeCapsule[]         @relation("TimeCapsuleCreator")
+  timeCapsulesParticipant TimeCapsule[]       @relation("TimeCapsuleParticipant")
+  voiceNotes            VoiceNote[]
+  accounts              Account[]
+  sessions              Session[]
+}
+
+model Post {
+  id              String      @id @default(cuid())
+  authorId        String
+  author          User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content         String
+  image           String?
+  format          PostFormat  @default(STANDARD)
+  audioDuration   Int?
+  voiceWaveform   Int[]       @default([])
+  midnightGradient String?
+  isAnonymous     Boolean     @default(false)
+  readingTime     String?
+  vibe            String?
+  tags            String[]    @default([])
+  likesCount      Int         @default(0)
+  commentsCount   Int         @default(0)
+  shares          Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  comments        Comment[]
+  likes           Like[]
+
+  @@index([createdAt])
+  @@index([authorId, createdAt])
+  @@index([format, createdAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  likes     Int      @default(0)
+  isLiked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@index([postId, createdAt])
+}
+
+model Connection {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation("UserConnections", fields: [userId], references: [id], onDelete: Cascade)
+  connectedUserId String
+  connectedUser   User     @relation("ConnectedUsers", fields: [connectedUserId], references: [id], onDelete: Cascade)
+  connectedAt     DateTime @default(now())
+  lastMessage     String?
+  lastMessageAt   DateTime?
+
+  @@unique([userId, connectedUserId])
+  @@index([userId, connectedAt])
+  @@index([connectedUserId, connectedAt])
+}
+
+model Conversation {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages   Message[]
+  voiceNotes VoiceNote[]
+  sharedVault SharedVault?
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt       DateTime     @default(now())
+  lastReadAt     DateTime?
+
+  @@unique([conversationId, userId])
+}
+
+model Message {
+  id              String       @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId      String
+  receiver        User         @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  content         String
+  type            MessageType  @default(TEXT)
+  isRead          Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([senderId, receiverId])
+  @@index([receiverId, isRead])
+}
+
+model Story {
+  id           String   @id @default(cuid())
+  authorId     String
+  author       User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  images       String[]
+  views        Int      @default(0)
+  hasSeen      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@index([authorId, createdAt])
+}
+
+model Report {
+  id            String        @id @default(cuid())
+  reporterId    String
+  reporter      User          @relation("SentReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedId    String
+  reportedUser  User          @relation("ReceivedReports", fields: [reportedId], references: [id], onDelete: Cascade)
+  reason        ReportReason
+  description   String?
+  status        String        @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, DISMISSED
+  severity      String        @default("MEDIUM")  // LOW, MEDIUM, HIGH, CRITICAL_IMMINENT_HARM
+  evidence      String?       @db.Text            // JSON stringified message context
+  moderatorNotes String?      @db.Text
+  actionTaken   String?                           // WARNING_ISSUED, TEMPORARY_SUSPENSION, PERMANENT_BAN, DISMISSED
+  resolvedAt    DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@index([reportedId, createdAt])
+  @@index([status, severity])
+}
+
+model ModerationAuditLog {
+  id            String   @id @default(cuid())
+  moderatorId   String
+  action        String
+  targetUserId  String?
+  reportId      String?
+  details       String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  @@index([moderatorId, createdAt])
+}
+
+model ModerationAppeal {
+  id                String   @id @default(cuid())
+  userId            String
+  reason            String   @db.Text
+  status            String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  moderatorResponse String?  @db.Text
+  reviewedBy        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId, status])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  actorId     String?
+  actor       User?    @relation("ActorNotifications", fields: [actorId], references: [id], onDelete: SetNull)
+  type        String   // "LIKE", "COMMENT", "CONNECTION_REQUEST", "CONNECTION_ACCEPTED", "SYSTEM"
+  title       String
+  body        String
+  data        String?  @db.Text
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, isRead, createdAt])
+  @@index([userId, createdAt])
+}
+
+model Media {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key       String   @unique
+  fileName  String
+  fileType  String
+  fileSize  Int
+  folder    String
+  width     Int?
+  height    Int?
+  duration  Int?      // For video/audio in seconds
+  thumbnails String[] @default([])
+  status    String   @default("PENDING") // PENDING, PROCESSING, READY, FAILED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([key])
+}
+
+model MessageRequest {
+  id              String   @id @default(cuid())
+  senderId        String
+  sender          User     @relation("SentMessageRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId      String
+  receiver        User     @relation("ReceivedMessageRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+  initialMessage  String
+  status          String   @default("PENDING") // PENDING, ACCEPTED, DECLINED, EXPIRED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  respondedAt     DateTime?
+
+  @@index([senderId, createdAt])
+  @@index([receiverId, status, createdAt])
+  @@index([senderId, receiverId])
+}
+
+model Block {
+  id          String   @id @default(cuid())
+  blockerId   String
+  blocker     User     @relation("BlockingUsers", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId   String
+  blockedUser User     @relation("BlockedUsers", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([blockerId, blockedId])
+}
+
+model MatchPreference {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Interest categories (user-controllable weights)
+  interests       String[] @default([])
+  languages       String[] @default([])
+  ageGroupPref    String   @default("SAME")
+  minAge          Int?
+  maxAge          Int?
+  gameTags        String[] @default([])
+  hobbyTags       String[] @default([])
+  topicTags       String[] @default([])
+
+  // Location privacy
+  locationSharing String   @default("NONE")
+  country         String?
+  region          String?
+  city            String?
+
+  // Matching controls
+  enableInterestMatch Boolean @default(true)
+  minInterestOverlap  Int     @default(1)
+  allowSkipRematch    Boolean @default(false)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model SkipHistory {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skippedId   String
+  roomId      String?
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, skippedId])
+  @@index([userId, createdAt])
+  @@index([skippedId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model GameSession {
+  id                    String   @id @default(cuid())
+  gameType              String
+  gameState             String   @db.Text  // Serialized game state
+  status                String   @default("WAITING") // WAITING, ACTIVE, PAUSED, FINISHED, ABANDONED
+  currentTurnPlayerId   String?
+  config                String   @db.Text  // JSON config
+  participants          String   @db.Text  // JSON array of userIds
+  winnerId              String?
+  result                String?  // PLAYER1_WIN, PLAYER2_WIN, DRAW
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  startedAt             DateTime?
+  finishedAt            DateTime?
+  moves                 GameMove[]
+
+  @@index([participants])
+  @@index([status, createdAt])
+  @@index([gameType, status])
+}
+
+model GameMove {
+  id            String   @id @default(cuid())
+  gameSessionId String
+  gameSession   GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+  playerId      String
+  player        User     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  turnNumber    Int
+  action        String
+  payload       String   @db.Text  // JSON payload
+  timestamp     DateTime @default(now())
+  validated     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  @@index([gameSessionId, turnNumber])
+  @@index([playerId, createdAt])
+}
+
+model GamePrompt {
+  id            String   @id @default(cuid())
+  gameType      String   // 'truthordare', 'wordmystery', 'dilemma'
+  category      String   // 'truth', 'dare', 'wouldyourather', etc.
+  text          String
+  ageRating     String   @default("ALL") // 'TEEN', 'ADULT', 'ALL'
+  source        String   @default("OFFICIAL") // 'OFFICIAL', 'USER_SUBMITTED'
+  status        String   @default("ACTIVE") // 'ACTIVE', 'PENDING_REVIEW', 'REJECTED', 'FLAGGED'
+  submittedBy   String?
+  reportCount   Int      @default(0)
+  createdAt     DateTime @default(now())
+  reviewedAt    DateTime?
+  reviewedBy    String?
+
+  @@index([gameType, category, status])
+  @@index([ageRating, status])
+  @@index([submittedBy, createdAt])
+}
+
+model VoiceNote {
+  id              String   @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId        String
+  sender          User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  audioKey        String   // R2/S3 object key
+  duration        Int      // seconds
+  waveform        Int[]    @default([]) // Precomputed for visualization
+  transcript      String?
+  isListened      Boolean  @default(false)
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+  @@index([senderId, createdAt])
+}
+
+model TimeCapsule {
+  id             String   @id @default(cuid())
+  creatorId      String
+  creator        User     @relation("TimeCapsuleCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  participantId  String?
+  participant    User?    @relation("TimeCapsuleParticipant", fields: [participantId], references: [id], onDelete: SetNull)
+  title          String
+  content        String   @db.Text  // JSON: { messages, media, notes }
+  unlockAt       DateTime
+  isUnlocked     Boolean  @default(false)
+  status         String   @default("PENDING") // 'PENDING', 'SHARED', 'UNLOCKED', 'EXPIRED'
+  createdAt      DateTime @default(now())
+  unlockedAt     DateTime?
+
+  @@index([creatorId, unlockAt])
+  @@index([participantId, status])
+}
+
+model SharedVault {
+  id              String   @id @default(cuid())
+  conversationId  String   @unique
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  items           VaultItem[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model VaultItem {
+  id            String   @id @default(cuid())
+  vaultId       String
+  vault         SharedVault @relation(fields: [vaultId], references: [id], onDelete: Cascade)
+  type          String   // 'IMAGE', 'VOICE', 'LINK', 'NOTE'
+  key           String   // R2/S3 key or URL
+  caption       String?
+  addedBy       String
+  addedAt       DateTime @default(now())
+  expiresAt     DateTime?
+
+  @@index([vaultId, addedAt])
+}

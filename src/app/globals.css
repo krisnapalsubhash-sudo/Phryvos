@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   PHRYVOS — MODERN MINIMALIST SOCIAL DESIGN SYSTEM
+   Linear-inspired clarity × Rich Social Network × Glassmorphism
+============================================================ */
+
+:root {
+  --radius: 16px;
+
+  /* LIGHT THEME (Crisp, High-End Minimalist) */
+  --background: #FAFAFA;
+  --foreground: #09090B;
+
+  --card: #FFFFFF;
+  --card-foreground: #09090B;
+
+  --surface: #FFFFFF;
+  --surface-elevated: #FFFFFF;
+  --surface-hover: #F4F4F5;
+  --surface-active: #E4E4E7;
+
+  --popover: #FFFFFF;
+  --popover-foreground: #09090B;
+
+  --primary: #52525B;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #F4F4F5;
+  --secondary-foreground: #18181B;
+
+  --muted: #F4F4F5;
+  --muted-foreground: #71717A;
+
+  --accent: #F4F4F5;
+  --accent-foreground: #18181B;
+
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+
+  --border: #E4E4E7;
+  --input: #E4E4E7;
+  --ring: #71717A;
+
+  --text-primary: #09090B;
+  --text-secondary: #71717A;
+  --text-tertiary: #A1A1AA;
+
+  --atmos-glow: rgba(0, 0, 0, 0.04);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(228, 228, 231, 0.8);
+}
+
+.dark {
+  /* DARK THEME (Pure Obsidian Noir, Linear / Vercel style - Zero Murky Blue) */
+  --background: #000000;
+  --foreground: #F4F4F5;
+
+  --card: #0F0F12;
+  --card-foreground: #F4F4F5;
+
+  --surface: #0F0F12;
+  --surface-elevated: #16161A;
+  --surface-hover: #1E1E24;
+  --surface-active: #26262E;
+
+  --popover: #0F0F12;
+  --popover-foreground: #F4F4F5;
+
+  --primary: #F4F4F5;
+  --primary-foreground: #09090B;
+
+  --secondary: #16161A;
+  --secondary-foreground: #F4F4F5;
+
+  --muted: #16161A;
+  --muted-foreground: #A1A1AA;
+
+  --accent: #1E1E24;
+  --accent-foreground: #FAFAFA;
+
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+
+  --border: rgba(255, 255, 255, 0.09);
+  --input: rgba(255, 255, 255, 0.09);
+  --ring: #F4F4F5;
+
+  --text-primary: #F4F4F5;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #71717A;
+
+  --atmos-glow: rgba(255, 255, 255, 0.05);
+  --glass-bg: rgba(15, 15, 18, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.09);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+  }
+}
+
+/* Custom modern scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}

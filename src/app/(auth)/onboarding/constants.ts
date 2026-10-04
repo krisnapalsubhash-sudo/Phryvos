@@ -1,0 +1,138 @@
+export const DISCOVERY_SOURCES = [
+  { id: 'friend', label: 'Friend or Colleague', emoji: '🗣️', desc: 'Recommended by someone I know' },
+  { id: 'social', label: 'Instagram / Reels / TikTok', emoji: '📱', desc: 'Discovered via video or reel' },
+  { id: 'reddit', label: 'Reddit / Online Communities', emoji: '👽', desc: 'Found in online discussions' },
+  { id: 'search', label: 'Google Search / Web', emoji: '🔍', desc: 'Searched for social connection apps' },
+  { id: 'campus', label: 'Campus / College / Coworking', emoji: '🎓', desc: 'Heard about it around campus' },
+  { id: 'stumble', label: 'Stumbled Upon It', emoji: '✨', desc: 'Pure serendipity and curiosity' },
+];
+
+export const FEATURE_INTROS = [
+  {
+    key: 'cosmicRadio' as const,
+    name: 'Cosmic Ambient Radio',
+    emoji: '📻',
+    desc: 'Lo-fi & rain frequencies in background with live co-listeners',
+  },
+  {
+    key: 'gamesAndActivities' as const,
+    name: 'Games & Activities Hub',
+    emoji: '🎮',
+    desc: 'Chess Blitz, Ludo Stadium, Trivia Orbit, and Daily Dilemmas',
+  },
+  {
+    key: 'storiesAndFleeting' as const,
+    name: '24h Stories & Fleeting Moments',
+    emoji: '⏱️',
+    desc: 'Full-screen visual & voice stories that disappear in 24 hours',
+  },
+  {
+    key: 'voiceDrops' as const,
+    name: 'Voice Drops & Audio Snippets',
+    emoji: '🎙️',
+    desc: 'Record and listen to 15s voice reflections with waveforms',
+  },
+  {
+    key: 'midnightDrops' as const,
+    name: 'Midnight Confession Cards',
+    emoji: '🌙',
+    desc: 'Dark velvet typography cards for deep, unfiltered thoughts',
+  },
+  {
+    key: 'whisperToStranger' as const,
+    name: 'Secret Whispers to Stranger',
+    emoji: '🤫',
+    desc: 'Private direct quote & secret message button on stories',
+  },
+];
+
+export const INTENT_OPTIONS = [
+  {
+    id: 'talk',
+    emoji: '💬',
+    label: 'Someone to talk to',
+    desc: 'Just wanna chat, share, or vent',
+    color: 'from-blue-500/20 to-indigo-500/20',
+    border: 'border-blue-500/40',
+    glow: 'shadow-blue-500/20',
+  },
+  {
+    id: 'friends',
+    emoji: '🤝',
+    label: 'Make new friends',
+    desc: 'Meet people who vibe with you',
+    color: 'from-emerald-500/20 to-teal-500/20',
+    border: 'border-emerald-500/40',
+    glow: 'shadow-emerald-500/20',
+  },
+  {
+    id: 'gaming',
+    emoji: '🎮',
+    label: 'Find a gaming partner',
+    desc: 'Squad up, rank up, have fun',
+    color: 'from-purple-500/20 to-violet-500/20',
+    border: 'border-purple-500/40',
+    glow: 'shadow-purple-500/20',
+  },
+  {
+    id: 'study',
+    emoji: '📚',
+    label: 'Study or work partner',
+    desc: 'Focus together, grow together',
+    color: 'from-amber-500/20 to-orange-500/20',
+    border: 'border-amber-500/40',
+    glow: 'shadow-amber-500/20',
+  },
+  {
+    id: 'language',
+    emoji: '🌍',
+    label: 'Language / Culture exchange',
+    desc: 'Learn, share, and connect globally',
+    color: 'from-cyan-500/20 to-sky-500/20',
+    border: 'border-cyan-500/40',
+    glow: 'shadow-cyan-500/20',
+  },
+  {
+    id: 'explore',
+    emoji: '✨',
+    label: 'Just exploring',
+    desc: "I'll decide when I get there",
+    color: 'from-pink-500/20 to-rose-500/20',
+    border: 'border-pink-500/40',
+    glow: 'shadow-pink-500/20',
+  },
+];
+
+export const INTERESTS = [
+  { label: 'Gaming', emoji: '🎮' },
+  { label: 'Music', emoji: '🎵' },
+  { label: 'Travel', emoji: '✈️' },
+  { label: 'Coding', emoji: '💻' },
+  { label: 'Anime', emoji: '⛩️' },
+  { label: 'Art', emoji: '🎨' },
+  { label: 'Sports', emoji: '⚽' },
+  { label: 'Photography', emoji: '📸' },
+  { label: 'Books', emoji: '📖' },
+  { label: 'Movies', emoji: '🎬' },
+  { label: 'Cooking', emoji: '🍳' },
+  { label: 'Dancing', emoji: '💃' },
+  { label: 'Fitness', emoji: '🏋️' },
+  { label: 'Technology', emoji: '🚀' },
+  { label: 'Science', emoji: '🔬' },
+  { label: 'Fashion', emoji: '👗' },
+  { label: 'Nature', emoji: '🌿' },
+  { label: 'Pets', emoji: '🐾' },
+  { label: 'Cricket', emoji: '🏏' },
+  { label: 'Writing', emoji: '✍️' },
+  { label: 'Memes', emoji: '😂' },
+  { label: 'Astronomy', emoji: '🔭' },
+  { label: 'Food', emoji: '🍕' },
+  { label: 'K-Pop', emoji: '🎤' },
+];
+
+export const AVATARS = [
+  '😊', '🦊', '🐺', '🦁', '🐯', '🦄',
+  '🐼', '🐨', '🦉', '🐙', '🦋', '🐢',
+  '🦈', '🐬', '🦜', '🐸', '🐲', '👾',
+  '🤖', '🧙', '🧝', '🧛', '🦸', '🧜',
+];

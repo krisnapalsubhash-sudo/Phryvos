@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /settings/
+Disallow: /notifications/
+
+Sitemap: https://phryvos.com/sitemap.xml

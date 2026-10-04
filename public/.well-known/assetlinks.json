@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "in.phryvos.app",
+        "sha256_cert_fingerprints": ["1A:6D:AF:71:40:7C:84:65:E0:BD:1C:3D:FB:0D:87:5B:FC:DB:93:29:09:03:33:AA:E0:C1:56:BF:EC:03:16:CD"]
+      }
+    }]
