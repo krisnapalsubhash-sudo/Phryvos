@@ -228,23 +228,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // No connection - check for existing pending message request
-    const existingRequest = await prisma.messageRequest.findFirst({
-      where: {
-        senderId: session.user.id,
-        receiverId: targetUserId,
-        status: 'PENDING',
-      },
-    });
-
-    if (existingRequest) {
-      return NextResponse.json({
-        success: true,
-        messageRequest: existingRequest,
-        message: 'Message request already pending',
-      });
-    }
-
+    // No connection - create message request
     const messageRequest = await prisma.messageRequest.create({
       data: {
         senderId: session.user.id,

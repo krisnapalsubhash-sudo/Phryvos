@@ -99,3 +99,78 @@ export async function GET(
     );
   }
 }
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id: conversationId } = await params;
+    const body = await request.json();
+    const { content, type = 'TEXT' } = body;
+
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return NextResponse.json({ error: 'Message content is required' }, { status: 400 });
+    }
+
+    // Verify sender is an active participant in this conversation
+    const senderParticipant = await prisma.conversationParticipant.findUnique({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId: session.user.id,
+        },
+      },
+    });
+
+    if (!senderParticipant) {
+      return NextResponse.json({ error: 'Forbidden: You are not a participant in this conversation' }, { status: 403 });
+    }
+
+    // Identify recipient(s) in this 1:1 / direct conversation
+    const recipientParticipant = await prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId: { not: session.user.id },
+      },
+    });
+
+    if (!recipientParticipant) {
+      return NextResponse.json({ error: 'No recipient found in conversation' }, { status: 400 });
+    }
+
+    const { conversationService } = await import('@/lib/services/conversationService');
+    const message = await conversationService.sendMessage({
+      conversationId,
+      senderId: session.user.id,
+      receiverId: recipientParticipant.userId,
+      content: content.trim(),
+      type: type as any,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: {
+        id: message.id,
+        senderId: message.senderId,
+        receiverId: message.receiverId,
+        content: message.content,
+        type: message.type.toLowerCase(),
+        timestamp: message.createdAt.toISOString(),
+        isRead: message.isRead,
+        sender: message.sender,
+      },
+    });
+  } catch (error: any) {
+    console.error('Send message error:', error);
+    return NextResponse.json(
+      { error: error?.message || 'Failed to send message' },
+      { status: 500 }
+    );
+  }
+}

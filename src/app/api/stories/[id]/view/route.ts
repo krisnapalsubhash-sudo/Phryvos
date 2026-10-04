@@ -26,18 +26,46 @@ export async function POST(
       return NextResponse.json({ error: 'Story has expired' }, { status: 410 });
     }
 
-    // Increment views atomically
-    const updatedStory = await prisma.story.update({
-      where: { id },
-      data: { views: { increment: 1 } },
-      select: { views: true },
-    });
+    let wasAlreadyViewed = false;
 
-    // TODO: Track per-user hasSeen in a separate table if needed
+    if (session?.user?.id) {
+      // Check if user has already viewed this story
+      const existingView = await prisma.storyView.findUnique({
+        where: {
+          storyId_userId: {
+            storyId: id,
+            userId: session.user.id,
+          },
+        },
+      });
+
+      if (existingView) {
+        wasAlreadyViewed = true;
+      } else {
+        await prisma.storyView.create({
+          data: {
+            storyId: id,
+            userId: session.user.id,
+          },
+        });
+      }
+    }
+
+    // Increment views only if not already viewed by this user
+    let views = story.views;
+    if (!wasAlreadyViewed) {
+      const updatedStory = await prisma.story.update({
+        where: { id },
+        data: { views: { increment: 1 } },
+        select: { views: true },
+      });
+      views = updatedStory.views;
+    }
 
     return NextResponse.json({
       success: true,
-      views: updatedStory.views,
+      views,
+      hasSeen: true,
     });
   } catch (error) {
     console.error('View story error:', error);

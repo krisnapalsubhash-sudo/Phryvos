@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-arm64-openssl-3.0.x"]
   previewFeatures = ["driverAdapters"]
 }
 
@@ -73,6 +74,7 @@ model User {
   blocks                Block[]               @relation("BlockedUsers")
   blockedBy             Block[]               @relation("BlockingUsers")
   stories               Story[]
+  storyViews            StoryView[]
   media                 Media[]
   notifications         Notification[]        @relation("UserNotifications")
   actedNotifications    Notification[]        @relation("ActorNotifications")
@@ -201,17 +203,31 @@ model Message {
 }
 
 model Story {
-  id           String   @id @default(cuid())
+  id           String      @id @default(cuid())
   authorId     String
-  author       User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author       User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
   images       String[]
-  views        Int      @default(0)
-  hasSeen      Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  views        Int         @default(0)
+  hasSeen      Boolean     @default(false)
+  createdAt    DateTime    @default(now())
   expiresAt    DateTime
+  storyViews   StoryView[]
 
   @@index([authorId, createdAt])
 }
+
+model StoryView {
+  id        String   @id @default(cuid())
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  viewedAt  DateTime @default(now())
+
+  @@unique([storyId, userId])
+  @@index([userId, viewedAt])
+}
+
 
 model Report {
   id            String        @id @default(cuid())

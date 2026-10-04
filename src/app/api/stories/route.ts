@@ -71,6 +71,12 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
       include: {
         author: { select: USER_PUBLIC_FIELDS },
+        storyViews: session?.user?.id
+          ? {
+              where: { userId: session.user.id },
+              select: { id: true },
+            }
+          : false,
       },
     });
 
@@ -87,7 +93,7 @@ export async function GET(request: NextRequest) {
         author: story.author,
         images: story.images,
         views: story.views,
-        hasSeen: false, // TODO: track per-user views
+        hasSeen: Boolean(story.storyViews && story.storyViews.length > 0),
         createdAt: story.createdAt.toISOString(),
         expiresAt: story.expiresAt.toISOString(),
       })),
