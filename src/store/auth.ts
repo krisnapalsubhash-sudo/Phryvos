@@ -72,26 +72,9 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       isHydrated: false,
 
-      login: (username: string) =>
-        set({
-          isAuthenticated: true,
-          isLoading: false,
-          user: {
-            id: 'me',
-            username,
-            displayName: username,
-            bio: '',
-            avatar: '😊',
-            interests: [],
-            location: '',
-            followers: 0,
-            following: 0,
-            postsCount: 0,
-            isConnected: false,
-            isOnline: true,
-            createdAt: new Date().toISOString(),
-          },
-        }),
+      login: (_username: string) => {
+        console.warn('Direct useAuthStore.login is deprecated. Use NextAuth signIn() for server-validated auth.');
+      },
 
       logout: () => set({ user: null, isAuthenticated: false }),
 
@@ -136,7 +119,6 @@ export const useAuthStore = create<AuthState>()(
       storage: createJSONStorage(createServerSafeStorage),
       partialize: (state) => ({
         user: state.user,
-        isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) state.setHydrated(true);
