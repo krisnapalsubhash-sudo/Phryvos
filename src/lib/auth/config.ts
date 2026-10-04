@@ -10,6 +10,8 @@ const isDemoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
 function createAuthConfig() {
   const baseConfig = {
+    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'development-secret-key-change-in-production-min-32-chars-long',
+    trustHost: true,
     pages: {
       signIn: '/login',
       error: '/login',

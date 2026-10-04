@@ -4,4 +4,4 @@ Disallow: /api/
 Disallow: /settings/
 Disallow: /notifications/
 
-Sitemap: https://phryvos.com/sitemap.xml
+Sitemap: https://www.phryvos.in/sitemap.xml
