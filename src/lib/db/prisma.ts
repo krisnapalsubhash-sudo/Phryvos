@@ -39,15 +39,15 @@ export function getPrismaClient(): PrismaClient {
 
   // Production and Runtime initialization
   const databaseUrl = env.DATABASE_URL;
-  if (!databaseUrl && process.env.NODE_ENV === 'production') {
-    console.error('FATAL: DATABASE_URL environment variable is missing in production runtime.');
+  if (!databaseUrl) {
+    throw new Error('FATAL: DATABASE_URL environment variable is missing.');
   }
 
   // Use the @prisma/adapter-pg with pure JS pg driver to bypass native binary limitations
   const { Pool } = require('pg');
   const { PrismaPg } = require('@prisma/adapter-pg');
   
-  const pool = new Pool({ connectionString: databaseUrl || 'postgresql://postgres:postgres@localhost:5432/phryvos' });
+  const pool = new Pool({ connectionString: databaseUrl });
   const adapter = new PrismaPg(pool);
 
   const client = new PrismaClient({
