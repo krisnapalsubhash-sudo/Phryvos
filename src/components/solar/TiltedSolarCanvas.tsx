@@ -92,9 +92,20 @@ export function TiltedSolarCanvas({ isMatching }: TiltedSolarCanvasProps) {
     if (!ctx) return;
 
     let startTime = performance.now();
+    let lastFrameTime = performance.now();
     let currentSunY = 0;
     let targetSunY = 0;
     let currentTiltFactor = 0.24; // 76 degree tilt -> sin(14deg) ≈ 0.24
+
+    // Check prefers-reduced-motion for accessibility
+    const prefersReducedMotion = typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Adaptive FPS Governor: 30 FPS budget on low-tier mobile, 60 FPS on desktop
+    const isLowPower = typeof navigator !== 'undefined' &&
+      (((navigator as any).hardwareConcurrency || 4) <= 4 || window.innerWidth < 480);
+    const targetFPS = isLowPower ? 30 : 60;
+    const minFrameInterval = 1000 / targetFPS - 2;
 
     // Dynamic scale factor according to canvas size
     function getScale() {
@@ -105,7 +116,21 @@ export function TiltedSolarCanvas({ isMatching }: TiltedSolarCanvasProps) {
 
     function render(now: number) {
       if (!ctx || !canvas) return;
-      const time = (now - startTime) / 1000;
+
+      // FPS Governor throttle
+      const delta = now - lastFrameTime;
+      if (delta < minFrameInterval) {
+        if (isRunning && isIntersecting && !document.hidden) {
+          animFrameRef.current = requestAnimationFrame(render);
+        }
+        return;
+      }
+      lastFrameTime = now;
+
+      // If reduced motion is requested, time flows at 5% rate for subtle static elegance
+      const time = prefersReducedMotion
+        ? ((now - startTime) / 1000) * 0.05
+        : (now - startTime) / 1000;
       const matching = stateRef.current.isMatching;
 
       const rect = canvas.getBoundingClientRect();
@@ -124,8 +149,8 @@ export function TiltedSolarCanvas({ isMatching }: TiltedSolarCanvasProps) {
 
       // 1. CENTER SUN DYNAMICS:
       // Idle: Bobs up & down softly (sinusoidal float).
-      // Matching: Uchhalna band kar deta hai! Immediately locks at center y = 0.
-      if (matching) {
+      // Matching: Locks at center y = 0.
+      if (matching || prefersReducedMotion) {
         targetSunY = 0;
       } else {
         targetSunY = Math.sin(time * 2.4) * (14 * scale);
@@ -135,9 +160,9 @@ export function TiltedSolarCanvas({ isMatching }: TiltedSolarCanvasProps) {
       const sunRadius = 26 * scale;
 
       // 2. CALCULATE PLANET POSITIONS (75° SIDE-VIEW ELLIPSE)
-      // When matching: speed increases by 4.5x, and orbits tilt into non-symmetrical individual planes.
+      // When matching: speed increases by 4.5x, unless reduced-motion is requested.
       const planetPositions = planetsRef.current.map((p, idx) => {
-        const speedMult = matching ? 4.5 : 1.0;
+        const speedMult = prefersReducedMotion ? 0.05 : (matching ? 4.5 : 1.0);
         const currentAngle = p.startAngle + time * (p.baseSpeed * speedMult);
 
         const rx = p.rx * scale;

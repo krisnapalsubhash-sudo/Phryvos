@@ -24,7 +24,7 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 h-16 glass-panel border-t border-border/80 z-50 md:hidden flex items-center justify-around px-2"
+      className="fixed bottom-0 left-0 right-0 h-[calc(4rem+env(safe-area-inset-bottom,0px))] pb-[env(safe-area-inset-bottom,0px)] glass-panel border-t border-border/80 z-50 md:hidden flex items-center justify-around px-2"
       aria-label="Mobile navigation"
     >
       {navItems.map((item) => {
@@ -37,7 +37,7 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               onClick={() => sound.playPop(620)}
-              className="relative -top-4 flex flex-col items-center group"
+              className="relative -top-3 flex flex-col items-center group min-h-[44px] min-w-[44px] justify-center"
               aria-label={item.label}
             >
               <div className="w-12 h-12 rounded-full phryvos-gradient flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 ring-4 ring-background transition-transform active:scale-95">
@@ -53,7 +53,7 @@ export function BottomNav() {
             key={item.href}
             href={item.href}
             onClick={() => sound.playPop(440)}
-            className={`relative flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all ${
+            className={`relative flex flex-col items-center justify-center min-h-[44px] min-w-[44px] py-1 px-3 rounded-xl transition-all ${
               isActive ? 'text-primary font-semibold' : 'text-muted-foreground hover:text-foreground'
             }`}
             aria-label={item.label}

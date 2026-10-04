@@ -23,9 +23,14 @@ export default function GlobalError({
       <h1 className="text-3xl font-bold tracking-tight text-foreground mb-2">
         Something went wrong!
       </h1>
-      <p className="text-muted-foreground text-sm max-w-md mb-8">
+      <p className="text-muted-foreground text-sm max-w-md mb-2">
         An unexpected error occurred while loading this page. Our team has been notified.
       </p>
+      {error.digest && (
+        <p className="text-xs font-mono text-muted-foreground/80 mb-6 bg-secondary/50 px-3 py-1 rounded-md">
+          Incident ID: {error.digest}
+        </p>
+      )}
       <div className="flex flex-col sm:flex-row items-center gap-3">
         <button
           onClick={() => reset()}
