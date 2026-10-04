@@ -210,11 +210,12 @@ export class PrivacyService {
             skippedId,
             roomId,
             reason,
+            count: 1,
           },
           update: {
             roomId,
             reason,
-            createdAt: new Date(),
+            count: { increment: 1 },
           },
         });
       }

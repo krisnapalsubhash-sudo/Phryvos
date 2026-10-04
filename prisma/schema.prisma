@@ -379,7 +379,9 @@ model SkipHistory {
   skippedId   String
   roomId      String?
   reason      String?
+  count       Int      @default(1)
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([userId, skippedId])
   @@index([userId, createdAt])
