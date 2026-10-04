@@ -5,12 +5,24 @@ import { useAuthStore } from '@/store/auth';
 import { useRealtimeStore } from '@/store/realtime';
 import { useConnectionsStore } from '@/store/connections';
 import type { RealtimeUser } from '@/lib/realtime/types';
+import dynamic from 'next/dynamic';
 import { sound } from '@/lib/sound';
 import { TicTacToeModal } from '@/components/chat/TicTacToeModal';
 import { WordMysteryModal } from '@/components/chat/WordMysteryModal';
-import { RadarOrbitalCanvas } from '@/components/radar/RadarOrbitalCanvas';
 import { RadarChatView } from '@/components/radar/RadarChatView';
 import { RadarSettingsDrawer } from '@/components/radar/RadarSettingsDrawer';
+
+const RadarOrbitalCanvas = dynamic(
+  () => import('@/components/radar/RadarOrbitalCanvas').then((m) => m.RadarOrbitalCanvas),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full flex items-center justify-center bg-black/40">
+        <div className="w-12 h-12 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+      </div>
+    ),
+  }
+);
 
 export default function RadarPage() {
   const { user, isAuthenticated, isHydrated } = useAuthStore();

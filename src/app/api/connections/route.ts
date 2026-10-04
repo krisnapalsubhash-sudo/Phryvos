@@ -108,10 +108,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingConnection) {
-      return NextResponse.json(
-        { error: 'Already following this user' },
-        { status: 409 }
-      );
+      return NextResponse.json({
+        success: true,
+        message: 'Already connected with this user',
+        connected: true,
+      });
     }
 
     // Check if blocked either way
@@ -161,14 +162,15 @@ export async function POST(request: NextRequest) {
       }),
     ]);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, connected: true });
   } catch (error: any) {
-    // Handle unique constraint violation (race condition)
+    // Handle unique constraint violation (race condition / concurrent follow) idempotently
     if (error.code === 'P2002') {
-      return NextResponse.json(
-        { error: 'Already following this user' },
-        { status: 409 }
-      );
+      return NextResponse.json({
+        success: true,
+        message: 'Already connected with this user',
+        connected: true,
+      });
     }
     console.error('Follow user error:', error);
     return NextResponse.json(

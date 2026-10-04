@@ -14,15 +14,11 @@ export class ConversationService {
     if (blocked) return null;
 
     const prisma = getPrismaClient();
+    const directKey = [userAId, userBId].sort().join(':');
 
-    // Look for conversation where both are participants
-    const existing = await prisma.conversation.findFirst({
-      where: {
-        AND: [
-          { participants: { some: { userId: userAId } } },
-          { participants: { some: { userId: userBId } } },
-        ],
-      },
+    // Look for conversation where both are participants using unique directKey
+    let existing = await prisma.conversation.findUnique({
+      where: { directKey },
       include: {
         participants: {
           include: {
@@ -39,32 +35,84 @@ export class ConversationService {
         },
       },
     });
+
+    if (!existing) {
+      existing = await prisma.conversation.findFirst({
+        where: {
+          AND: [
+            { participants: { some: { userId: userAId } } },
+            { participants: { some: { userId: userBId } } },
+          ],
+        },
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  displayName: true,
+                  avatar: true,
+                  isOnline: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    }
 
     if (existing) return existing;
 
-    // Create new conversation with participants
-    return await prisma.conversation.create({
-      data: {
-        participants: {
-          create: [{ userId: userAId }, { userId: userBId }],
+    // Create new conversation with participants and unique directKey
+    try {
+      return await prisma.conversation.create({
+        data: {
+          directKey,
+          participants: {
+            create: [{ userId: userAId }, { userId: userBId }],
+          },
         },
-      },
-      include: {
-        participants: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                username: true,
-                displayName: true,
-                avatar: true,
-                isOnline: true,
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  username: true,
+                  displayName: true,
+                  avatar: true,
+                  isOnline: true,
+                },
               },
             },
           },
         },
-      },
-    });
+      });
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        const raceConv = await prisma.conversation.findUnique({
+          where: { directKey },
+          include: {
+            participants: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    username: true,
+                    displayName: true,
+                    avatar: true,
+                    isOnline: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+        if (raceConv) return raceConv;
+      }
+      throw err;
+    }
   }
 
   /**
@@ -76,6 +124,7 @@ export class ConversationService {
     receiverId: string;
     content: string;
     type?: MessageType;
+    clientMessageId?: string;
   }) {
     // Check block status
     const blocked = await privacyService.isBlocked(data.senderId, data.receiverId);
@@ -85,16 +134,10 @@ export class ConversationService {
 
     const prisma = getPrismaClient();
 
-    return await prisma.$transaction(async (tx) => {
-      const message = await tx.message.create({
-        data: {
-          conversationId: data.conversationId,
-          senderId: data.senderId,
-          receiverId: data.receiverId,
-          content: data.content,
-          type: data.type || 'TEXT',
-          isRead: false,
-        },
+    // If clientMessageId provided, check for idempotent duplicate
+    if (data.clientMessageId) {
+      const existing = await prisma.message.findUnique({
+        where: { clientMessageId: data.clientMessageId },
         include: {
           sender: {
             select: {
@@ -106,19 +149,64 @@ export class ConversationService {
           },
         },
       });
+      if (existing) return existing;
+    }
 
-      // Update conversation updatedAt for sorting inbox
-      await tx.conversation.update({
-        where: { id: data.conversationId },
-        data: { updatedAt: new Date() },
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const message = await tx.message.create({
+          data: {
+            conversationId: data.conversationId,
+            senderId: data.senderId,
+            receiverId: data.receiverId,
+            content: data.content,
+            type: data.type || 'TEXT',
+            clientMessageId: data.clientMessageId,
+            isRead: false,
+          },
+          include: {
+            sender: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatar: true,
+              },
+            },
+          },
+        });
+
+        // Update conversation updatedAt for sorting inbox
+        await tx.conversation.update({
+          where: { id: data.conversationId },
+          data: { updatedAt: new Date() },
+        });
+
+        return message;
       });
-
-      return message;
-    });
+    } catch (err: any) {
+      if (data.clientMessageId && err?.code === 'P2002') {
+        const existing = await prisma.message.findUnique({
+          where: { clientMessageId: data.clientMessageId },
+          include: {
+            sender: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                avatar: true,
+              },
+            },
+          },
+        });
+        if (existing) return existing;
+      }
+      throw err;
+    }
   }
 
   /**
-   * Fetch conversation messages using [conversationId, createdAt] composite index
+   * Fetch conversation messages using composite index and stable cursor pagination
    */
   public async getMessages(conversationId: string, limit: number = 30, cursor?: string) {
     const prisma = getPrismaClient();
@@ -127,7 +215,8 @@ export class ConversationService {
       where: { conversationId },
       take: limit + 1,
       cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { createdAt: 'desc' },
+      skip: cursor ? 1 : 0,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         sender: {
           select: {
@@ -147,9 +236,15 @@ export class ConversationService {
       nextCursor = nextItem?.id || null;
     }
 
+    // Mask deleted messages
+    const sanitizedItems = items.map((msg) => ({
+      ...msg,
+      content: msg.isDeleted ? 'This message was deleted' : msg.content,
+    }));
+
     // Return in chronological ascending order for UI chat display
     return {
-      messages: items.reverse(),
+      messages: sanitizedItems.reverse(),
       nextCursor,
     };
   }
@@ -168,18 +263,31 @@ export class ConversationService {
   }
 
   /**
-   * Mark all messages in a conversation as read for the user
+   * Mark all messages in a conversation as read for the user atomically
    */
   public async markConversationRead(conversationId: string, userId: string) {
     const prisma = getPrismaClient();
-    await prisma.message.updateMany({
-      where: {
-        conversationId,
-        receiverId: userId,
-        isRead: false,
-      },
-      data: { isRead: true },
-    });
+    const readTimestamp = new Date();
+
+    await prisma.$transaction([
+      prisma.message.updateMany({
+        where: {
+          conversationId,
+          receiverId: userId,
+          isRead: false,
+        },
+        data: { isRead: true },
+      }),
+      prisma.conversationParticipant.update({
+        where: {
+          conversationId_userId: {
+            conversationId,
+            userId,
+          },
+        },
+        data: { lastReadAt: readTimestamp },
+      }),
+    ]);
   }
 }
 

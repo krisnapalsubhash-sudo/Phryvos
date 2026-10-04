@@ -150,20 +150,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Cannot message this user' }, { status: 403 });
     }
 
-    // Check if conversation already exists
-    const existingConversation = await prisma.conversation.findFirst({
-      where: {
-        AND: [
-          { participants: { some: { userId: session.user.id } } },
-          { participants: { some: { userId: targetUserId } } },
-        ],
-      },
+    const directKey = [session.user.id, targetUserId].sort().join(':');
+
+    // Check if conversation already exists by unique directKey
+    let existingConversation = await prisma.conversation.findUnique({
+      where: { directKey },
       include: {
         participants: {
           include: { user: { select: USER_PUBLIC_FIELDS } },
         },
       },
     });
+
+    if (!existingConversation) {
+      existingConversation = await prisma.conversation.findFirst({
+        where: {
+          AND: [
+            { participants: { some: { userId: session.user.id } } },
+            { participants: { some: { userId: targetUserId } } },
+          ],
+        },
+        include: {
+          participants: {
+            include: { user: { select: USER_PUBLIC_FIELDS } },
+          },
+        },
+      });
+    }
 
     if (existingConversation) {
       return NextResponse.json({
@@ -195,37 +208,61 @@ export async function POST(request: NextRequest) {
 
     if (connection) {
       // Direct conversation allowed
-      const conversation = await prisma.conversation.create({
-        data: {
-          participants: {
-            create: [
-              { userId: session.user.id },
-              { userId: targetUserId },
-            ],
-          },
-          messages: initialMessage ? {
-            create: {
-              senderId: session.user.id,
-              receiverId: targetUserId,
-              content: initialMessage,
-              type: 'TEXT',
+      try {
+        const conversation = await prisma.conversation.create({
+          data: {
+            directKey,
+            participants: {
+              create: [
+                { userId: session.user.id },
+                { userId: targetUserId },
+              ],
             },
-          } : undefined,
-        },
-        include: {
-          participants: {
-            include: { user: { select: USER_PUBLIC_FIELDS } },
+            messages: initialMessage ? {
+              create: {
+                senderId: session.user.id,
+                receiverId: targetUserId,
+                content: initialMessage,
+                type: 'TEXT',
+              },
+            } : undefined,
           },
-        },
-      });
+          include: {
+            participants: {
+              include: { user: { select: USER_PUBLIC_FIELDS } },
+            },
+          },
+        });
 
-      return NextResponse.json({
-        success: true,
-        conversation: {
-          id: conversation.id,
-          participants: conversation.participants.map((p) => p.user),
-        },
-      });
+        return NextResponse.json({
+          success: true,
+          conversation: {
+            id: conversation.id,
+            participants: conversation.participants.map((p) => p.user),
+          },
+        });
+      } catch (err: any) {
+        if (err?.code === 'P2002') {
+          const raceConv = await prisma.conversation.findUnique({
+            where: { directKey },
+            include: {
+              participants: {
+                include: { user: { select: USER_PUBLIC_FIELDS } },
+              },
+            },
+          });
+          if (raceConv) {
+            return NextResponse.json({
+              success: true,
+              conversation: {
+                id: raceConv.id,
+                participants: raceConv.participants.map((p) => p.user),
+              },
+            });
+          }
+        }
+        throw err;
+      }
     }
 
     // No connection - create message request

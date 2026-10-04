@@ -30,28 +30,33 @@ export async function POST(
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
     }
 
-    // Mark all unread messages as read
-    await prisma.message.updateMany({
-      where: {
-        conversationId: id,
-        receiverId: session.user.id,
-        isRead: false,
-      },
-      data: { isRead: true },
-    });
+    const readTimestamp = new Date();
 
-    // Update participant's lastReadAt
-    await prisma.conversationParticipant.update({
-      where: {
-        conversationId_userId: {
+    // Mark all unread messages as read and update lastReadAt atomically
+    await prisma.$transaction([
+      prisma.message.updateMany({
+        where: {
           conversationId: id,
-          userId: session.user.id,
+          receiverId: session.user.id,
+          isRead: false,
         },
-      },
-      data: { lastReadAt: new Date() },
-    });
+        data: { isRead: true },
+      }),
+      prisma.conversationParticipant.update({
+        where: {
+          conversationId_userId: {
+            conversationId: id,
+            userId: session.user.id,
+          },
+        },
+        data: { lastReadAt: readTimestamp },
+      }),
+    ]);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      lastReadAt: readTimestamp.toISOString(),
+    });
   } catch (error) {
     console.error('Mark read error:', error);
     return NextResponse.json(

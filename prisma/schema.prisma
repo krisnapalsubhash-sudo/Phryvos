@@ -163,6 +163,7 @@ model Connection {
 
 model Conversation {
   id        String   @id @default(cuid())
+  directKey String?  @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -195,11 +196,16 @@ model Message {
   content         String
   type            MessageType  @default(TEXT)
   isRead          Boolean      @default(false)
+  clientMessageId String?      @unique
+  isDeleted       Boolean      @default(false)
+  deletedAt       DateTime?
+  deletedBy       String?
   createdAt       DateTime     @default(now())
 
   @@index([conversationId, createdAt])
   @@index([senderId, receiverId])
   @@index([receiverId, isRead])
+  @@index([receiverId, isRead, conversationId])
 }
 
 model Story {
@@ -489,12 +495,16 @@ model VoiceNote {
   duration        Int      // seconds
   waveform        Int[]    @default([]) // Precomputed for visualization
   transcript      String?
+  status          String   @default("READY") // PENDING_UPLOAD, PROCESSING, READY, FAILED
+  mimeType        String   @default("audio/webm")
+  size            Int      @default(0)
   isListened      Boolean  @default(false)
   expiresAt       DateTime
   createdAt       DateTime @default(now())
 
   @@index([conversationId, createdAt])
   @@index([senderId, createdAt])
+  @@index([status])
 }
 
 model TimeCapsule {

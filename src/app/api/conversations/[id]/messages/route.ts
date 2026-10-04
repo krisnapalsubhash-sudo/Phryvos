@@ -49,12 +49,13 @@ export async function GET(
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
     }
 
-    // Get messages
+    // Get messages with deterministic cursor pagination
     const messages = await prisma.message.findMany({
       where: { conversationId: id },
       take: limit + 1,
       cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { createdAt: 'desc' },
+      skip: cursor ? 1 : 0,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         sender: { select: USER_PUBLIC_FIELDS },
       },
@@ -81,7 +82,8 @@ export async function GET(
         id: msg.id,
         senderId: msg.senderId,
         receiverId: msg.receiverId,
-        content: msg.content,
+        content: msg.isDeleted ? 'This message was deleted' : msg.content,
+        isDeleted: msg.isDeleted,
         type: msg.type.toLowerCase(),
         timestamp: msg.createdAt.toISOString(),
         isRead: msg.isRead,
@@ -112,10 +114,14 @@ export async function POST(
 
     const { id: conversationId } = await params;
     const body = await request.json();
-    const { content, type = 'TEXT' } = body;
+    const { content, type = 'TEXT', clientMessageId } = body;
 
     if (!content || typeof content !== 'string' || !content.trim()) {
       return NextResponse.json({ error: 'Message content is required' }, { status: 400 });
+    }
+
+    if (content.length > 5000) {
+      return NextResponse.json({ error: 'Message exceeds maximum length of 5000 characters' }, { status: 400 });
     }
 
     // Verify sender is an active participant in this conversation
@@ -151,6 +157,7 @@ export async function POST(
       receiverId: recipientParticipant.userId,
       content: content.trim(),
       type: type as any,
+      clientMessageId: typeof clientMessageId === 'string' ? clientMessageId.slice(0, 100) : undefined,
     });
 
     return NextResponse.json({
@@ -159,7 +166,8 @@ export async function POST(
         id: message.id,
         senderId: message.senderId,
         receiverId: message.receiverId,
-        content: message.content,
+        content: message.isDeleted ? 'This message was deleted' : message.content,
+        isDeleted: message.isDeleted,
         type: message.type.toLowerCase(),
         timestamp: message.createdAt.toISOString(),
         isRead: message.isRead,

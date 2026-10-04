@@ -5,6 +5,22 @@ import crypto from 'crypto';
 
 const prisma = getPrismaClient();
 
+const ALLOWED_FOLDERS = new Set(['posts', 'avatars', 'messages', 'stories', 'vault', 'voice']);
+
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+  'audio/mpeg': 'mp3',
+  'audio/ogg': 'ogg',
+  'audio/wav': 'wav',
+  'audio/webm': 'webm',
+};
+
 // Allowed file types and max sizes
 const ALLOWED_TYPES = {
   image: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
@@ -35,6 +51,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!ALLOWED_FOLDERS.has(folder)) {
+      return NextResponse.json({ error: 'Invalid upload destination folder' }, { status: 400 });
+    }
+
     // Validate file type
     let category: 'image' | 'video' | 'audio' | null = null;
     for (const [cat, types] of Object.entries(ALLOWED_TYPES)) {
@@ -44,7 +64,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (!category) {
+    if (!category || !MIME_TO_EXT[fileType]) {
       return NextResponse.json(
         { error: 'File type not allowed' },
         { status: 400 }
@@ -59,8 +79,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate unique key
-    const ext = fileName.split('.').pop() || '';
+    // Generate safe unique key with MIME-derived extension, completely path-traversal proof
+    const ext = MIME_TO_EXT[fileType];
     const key = `${folder}/${session.user.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
 
     // TODO: In production, generate presigned URL for S3/R2/Cloudflare R2
