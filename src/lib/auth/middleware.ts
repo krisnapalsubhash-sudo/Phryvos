@@ -1,5 +1,5 @@
-import { auth } from '@/lib/auth/config';
 import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 
 const PROTECTED_PATHS = [
   '/feed',
@@ -35,8 +35,14 @@ function isValidCallbackUrl(callbackUrl: string | null): boolean {
   }
 }
 
-export default auth((req) => {
-  const isLoggedIn = !!req.auth;
+export default function middleware(req: NextRequest) {
+  const sessionToken =
+    req.cookies.get('authjs.session-token')?.value ||
+    req.cookies.get('__Secure-authjs.session-token')?.value ||
+    req.cookies.get('next-auth.session-token')?.value ||
+    req.cookies.get('__Secure-next-auth.session-token')?.value;
+
+  const isLoggedIn = !!sessionToken;
   const pathname = req.nextUrl.pathname;
   const method = req.method;
   const searchParams = req.nextUrl.searchParams;
@@ -58,6 +64,7 @@ export default auth((req) => {
           originHostWithoutPort === hostWithoutPort ||
           originUrl.host === host ||
           originUrl.hostname.endsWith('phryvos.in') ||
+          originUrl.hostname.endsWith('vercel.app') ||
           originUrl.hostname === 'localhost' ||
           originUrl.hostname === '127.0.0.1';
 
@@ -99,7 +106,7 @@ export default auth((req) => {
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
   return response;
-});
+}
 
 export const config = {
   matcher: [

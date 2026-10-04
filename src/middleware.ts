@@ -1,1 +1,1 @@
-export { default } from '@/lib/auth/middleware';
+export { default, config } from '@/lib/auth/middleware';
