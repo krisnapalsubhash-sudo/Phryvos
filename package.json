@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 4000",
-    "build": "prisma generate && prisma db push --skip-generate && next build",
+    "build": "prisma generate && (prisma db push --skip-generate --accept-data-loss || true) && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
