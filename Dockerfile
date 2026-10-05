@@ -22,6 +22,7 @@ RUN pnpm exec prisma generate
 # Build Next.js app with standalone output
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV DOCKER_BUILD=1
 RUN NODE_OPTIONS=--max-old-space-size=4096 pnpm run build
 
 # Production stage

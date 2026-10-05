@@ -59,7 +59,9 @@ function main() {
   console.log('4. You should now see the admin dashboard!');
 }
 
-main().catch(error => {
+try {
+  main();
+} catch (error) {
   console.error('❌ Error setting admin ID:', error);
   process.exit(1);
-});
+}
