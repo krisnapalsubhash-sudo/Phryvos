@@ -1,4 +1,4 @@
-process.env.NODE_ENV = 'test';
+(process.env as Record<string, string | undefined>).NODE_ENV = 'test';
 
 import { realtimeEngine } from '../src/lib/realtime/engine';
 import { safetyEngine } from '../src/lib/safety/engine';
