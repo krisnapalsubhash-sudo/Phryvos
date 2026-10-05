@@ -7,10 +7,23 @@ import { useConnectionsStore } from '@/store/connections';
 import type { RealtimeUser } from '@/lib/realtime/types';
 import dynamic from 'next/dynamic';
 import { sound } from '@/lib/sound';
-import { TicTacToeModal } from '@/components/chat/TicTacToeModal';
-import { WordMysteryModal } from '@/components/chat/WordMysteryModal';
-import { RadarChatView } from '@/components/radar/RadarChatView';
-import { RadarSettingsDrawer } from '@/components/radar/RadarSettingsDrawer';
+
+const TicTacToeModal = dynamic(
+  () => import('@/components/chat/TicTacToeModal').then((m) => m.TicTacToeModal),
+  { ssr: false }
+);
+const WordMysteryModal = dynamic(
+  () => import('@/components/chat/WordMysteryModal').then((m) => m.WordMysteryModal),
+  { ssr: false }
+);
+const RadarChatView = dynamic(
+  () => import('@/components/radar/RadarChatView').then((m) => m.RadarChatView),
+  { ssr: false }
+);
+const RadarSettingsDrawer = dynamic(
+  () => import('@/components/radar/RadarSettingsDrawer').then((m) => m.RadarSettingsDrawer),
+  { ssr: false }
+);
 
 const RadarOrbitalCanvas = dynamic(
   () => import('@/components/radar/RadarOrbitalCanvas').then((m) => m.RadarOrbitalCanvas),

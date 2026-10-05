@@ -351,6 +351,7 @@ export function PostCard({ post }: PostCardProps) {
               {/* Play/Pause Button */}
               <button
                 onClick={toggleAudioPlay}
+                aria-label={isPlayingAudio ? 'Pause voice drop' : 'Play voice drop'}
                 className="w-12 h-12 rounded-full bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all shrink-0"
               >
                 {isPlayingAudio ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
@@ -469,6 +470,7 @@ export function PostCard({ post }: PostCardProps) {
           {/* Like Button */}
           <button
             onClick={handleLike}
+            aria-label={liked ? 'Unlike post' : 'Like post'}
             className={`flex items-center gap-1.5 text-xs font-medium py-1 px-2.5 rounded-xl hover:bg-secondary/60 transition-colors ${
               liked ? 'text-rose-500 font-semibold' : 'hover:text-foreground'
             }`}
@@ -484,6 +486,7 @@ export function PostCard({ post }: PostCardProps) {
               setShowComments(!showComments);
               sound.playPop(400);
             }}
+            aria-label={`Comments (${post.comments + commentsList.length})`}
             className="flex items-center gap-1.5 text-xs font-medium py-1 px-2.5 rounded-xl hover:bg-secondary/60 hover:text-foreground transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
@@ -498,6 +501,7 @@ export function PostCard({ post }: PostCardProps) {
                 setShowWhisperBox(!showWhisperBox);
                 sound.playPop(460);
               }}
+              aria-label="Send private whisper to author"
               className={`flex items-center gap-1.5 text-xs font-semibold py-1 px-2.5 rounded-xl transition-all ${
                 showWhisperBox
                   ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
@@ -516,6 +520,7 @@ export function PostCard({ post }: PostCardProps) {
               e.stopPropagation();
               handleShare();
             }}
+            aria-label="Share post"
             className="flex items-center gap-1.5 text-xs font-medium py-1 px-2.5 rounded-xl hover:bg-secondary/60 hover:text-foreground transition-colors"
           >
             <Share2 className="w-4 h-4" />
@@ -529,7 +534,7 @@ export function PostCard({ post }: PostCardProps) {
           className={`py-1 px-2.5 rounded-xl hover:bg-secondary/60 transition-colors ${
             bookmarked ? 'text-primary' : 'hover:text-foreground'
           }`}
-          aria-label="Save"
+          aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark post'}
         >
           <Bookmark className={`w-4 h-4 ${bookmarked ? 'fill-primary text-primary' : ''}`} />
         </button>

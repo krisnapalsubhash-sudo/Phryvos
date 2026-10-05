@@ -49,6 +49,7 @@ export function VoiceNotePlayer({ duration = '0:18', isMe = false }: VoiceNotePl
             : 'bg-primary text-white'
         }`}
         title={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? 'Pause voice note' : 'Play voice note'}
       >
         {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
       </button>

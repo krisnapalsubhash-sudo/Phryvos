@@ -1,19 +1,30 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { sound } from '@/lib/sound';
 import { getConversations } from '@/lib/mock/conversations';
 import type { Conversation, Message } from '@/types';
 import { CURRENT_USER } from '@/lib/mock';
-import { MomentsModal } from '@/components/chat/MomentsModal';
-import { RequestsModal } from '@/components/chat/RequestsModal';
-import { SharedVaultModal } from '@/components/chat/SharedVaultModal';
 import { ConversationSidebar } from '@/components/chat/ConversationSidebar';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { ChatInputBar } from '@/components/chat/ChatInputBar';
 import { useConnectionsStore } from '@/store/connections';
 import { useAuthStore } from '@/store/auth';
+
+const MomentsModal = dynamic(
+  () => import('@/components/chat/MomentsModal').then((m) => m.MomentsModal),
+  { ssr: false }
+);
+const RequestsModal = dynamic(
+  () => import('@/components/chat/RequestsModal').then((m) => m.RequestsModal),
+  { ssr: false }
+);
+const SharedVaultModal = dynamic(
+  () => import('@/components/chat/SharedVaultModal').then((m) => m.SharedVaultModal),
+  { ssr: false }
+);
 
 export default function MasterChatPage() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);

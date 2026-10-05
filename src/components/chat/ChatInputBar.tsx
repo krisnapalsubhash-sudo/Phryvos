@@ -75,6 +75,7 @@ export function ChatInputBar({
             type="button"
             onClick={onCancelReply}
             className="text-muted-foreground hover:text-foreground ml-2"
+            aria-label="Cancel reply"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -91,6 +92,7 @@ export function ChatInputBar({
               onClick={() => sound.playPop(420)}
               className="btn-icon w-8 h-8 rounded-lg hover:text-foreground p-1"
               title="Emoji"
+              aria-label="Choose emoji"
             >
               <Smile className="w-4 h-4" />
             </button>
@@ -99,6 +101,7 @@ export function ChatInputBar({
               onClick={() => sound.playPop(420)}
               className="btn-icon w-8 h-8 rounded-lg hover:text-foreground p-1"
               title="Share Image"
+              aria-label="Attach image"
             >
               <ImageIcon className="w-4 h-4" />
             </button>
@@ -107,6 +110,7 @@ export function ChatInputBar({
               onClick={() => sound.playPop(420)}
               className="btn-icon w-8 h-8 rounded-lg hover:text-foreground p-1"
               title="Voice Note"
+              aria-label="Record voice note"
             >
               <Mic className="w-4 h-4" />
             </button>
@@ -118,6 +122,7 @@ export function ChatInputBar({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder="Type your story..."
+            aria-label="Chat message input"
             className="flex-1 bg-secondary/60 hover:bg-secondary/80 focus:bg-background border border-border/60 focus:border-primary/50 text-sm sm:text-base px-4 py-2.5 rounded-full outline-none transition-all"
           />
 
@@ -132,6 +137,7 @@ export function ChatInputBar({
               silentSend ? 'text-purple-400 bg-purple-500/10' : 'text-muted-foreground hover:text-foreground'
             }`}
             title={silentSend ? 'Sending Silently (No ding)' : 'Normal Send'}
+            aria-label={silentSend ? 'Disable silent send' : 'Enable silent send (no notification sound)'}
           >
             <BellOff className="w-4 h-4" />
           </button>
@@ -142,6 +148,7 @@ export function ChatInputBar({
             disabled={!inputText.trim()}
             className="w-10 h-10 rounded-full bg-primary hover:bg-primary/90 text-white flex items-center justify-center disabled:opacity-40 shadow-xs transition-all active:scale-95 shrink-0"
             title="Send"
+            aria-label="Send message"
           >
             <Send className="w-4 h-4" />
           </button>

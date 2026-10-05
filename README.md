@@ -103,13 +103,13 @@ cp .env.example .env.local
 - `src/app/(app)/chat/page.tsx` — Chat lounge page
 - `src/app/(app)/feed/page.tsx` — Feed page
 
-## Próximos Passos (Roadmap)
+## Próximos Passos (Roadmap & Status)
 
-- [ ] Migrar realtime engine para Redis (escala horizontal)
-- [x] Adicionar autenticação real com NextAuth.js
-- [x] Adicionar banco de dados PostgreSQL com Prisma
-- [ ] Testes unitários (Vitest) para safety/realtime engines
-- [ ] Testes de integração para API routes
-- [ ] Substituir dados mock por API + seed de desenvolvimento
-- [ ] Accessibility improvements (ARIA, focus management)
-- [ ] Performance: lazy-load heavy components (TiltedSolarCanvas, GalaxyCanvas)
+- [x] Migrar realtime engine para Redis (escala horizontal com fallback in-memory)
+- [x] Adicionar autenticação real com NextAuth.js (com proteção contra brute-force, ban/suspension enforcement e hash de tokens)
+- [x] Adicionar banco de dados PostgreSQL com Prisma (schema robusto, transações atômicas e isolamento anônimo)
+- [x] Testes de segurança e isolamento para API routes & realtime engine (`npm run test:security`)
+- [x] Accessibility improvements (ARIA labels, contrast, audio controls, focus management)
+- [x] Performance: lazy-load heavy components (RadarOrbitalCanvas, modals, audio players, game views)
+- [ ] Testes unitários adicionais de componentes UI (Vitest)
+- [ ] Expansão de seeds de desenvolvimento para staging

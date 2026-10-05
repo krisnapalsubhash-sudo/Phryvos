@@ -22,13 +22,18 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePostsStore } from '@/store/posts';
+import dynamic from 'next/dynamic';
 import { useAuthStore } from '@/store/auth';
 import { useFeaturesStore } from '@/store/features';
 import { CURRENT_USER } from '@/lib/mock';
 import { PostCard } from '@/components/feed/PostCard';
 import { StoriesBar } from '@/components/feed/StoriesBar';
-import { StoryViewerModal } from '@/components/feed/StoryViewerModal';
 import { Button } from '@/components/ui/button';
+
+const StoryViewerModal = dynamic(
+  () => import('@/components/feed/StoryViewerModal').then((m) => m.StoryViewerModal),
+  { ssr: false }
+);
 import { Avatar } from '@/components/ui/avatar';
 import { sound } from '@/lib/sound';
 import type { Post, PostFormat } from '@/types';
