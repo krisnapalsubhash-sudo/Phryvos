@@ -56,18 +56,32 @@ export async function POST(
       });
     } else {
       // Like - create like and increment count
-      await prisma.$transaction([
-        prisma.like.create({
+      await prisma.$transaction(async (tx) => {
+        await tx.like.create({
           data: {
             userId,
             postId: id,
           },
-        }),
-        prisma.post.update({
+        });
+
+        await tx.post.update({
           where: { id },
           data: { likesCount: { increment: 1 } },
-        }),
-      ]);
+        });
+
+        if (post.authorId !== userId) {
+          await tx.notification.create({
+            data: {
+              userId: post.authorId,
+              actorId: userId,
+              type: 'LIKE',
+              title: 'New Like',
+              body: `${session.user.name || 'Someone'} liked your post`,
+              data: JSON.stringify({ postId: id }),
+            },
+          });
+        }
+      });
 
       return NextResponse.json({
         success: true,

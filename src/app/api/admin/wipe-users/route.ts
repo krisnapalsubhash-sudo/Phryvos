@@ -2,11 +2,17 @@ import { env } from "@/env";
 import { NextRequest, NextResponse } from 'next/server';
 import { getPrismaClient } from '@/lib/db/prisma';
 
-// One-time admin endpoint to wipe all user data
-// REMOVE THIS FILE after use!
+// One-time admin endpoint to wipe all user data (strictly disabled in production)
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Forbidden: Dangerous wipe operations are strictly disabled in production' },
+      { status: 403 }
+    );
+  }
+
   const secret = request.headers.get('x-admin-secret');
-  if (secret !== env.NEXTAUTH_SECRET) {
+  if (!secret || secret !== env.NEXTAUTH_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

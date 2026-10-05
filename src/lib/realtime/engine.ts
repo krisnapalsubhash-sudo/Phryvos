@@ -207,17 +207,37 @@ export class RealtimeServerEngine {
     }
   }
 
-  // Matchmaking Queue with scored matching and idempotency
-  public async addToQueue(user: RealtimeUser) {
-    // 1. Prevent duplicate queue entries
-    this.removeFromQueue(user.id);
+  private queueLock: Promise<void> = Promise.resolve();
 
-    // 2. If user is already in an active room, close the previous room cleanly
-    for (const [roomId, room] of this.activeRooms.entries()) {
-      if (room.participants.some((p) => p.id === user.id)) {
-        this.leaveRoom(roomId, user.id);
-      }
+  // Async Mutex to prevent race conditions during matchmaking candidate claim (Audit #6)
+  private async withQueueLock<T>(action: () => Promise<T>): Promise<T> {
+    let releaseLock: () => void;
+    const nextLock = new Promise<void>((resolve) => {
+      releaseLock = resolve;
+    });
+    const previousLock = this.queueLock;
+    this.queueLock = nextLock;
+
+    try {
+      await previousLock;
+      return await action();
+    } finally {
+      releaseLock!();
     }
+  }
+
+  // Matchmaking Queue with scored matching, atomic locking, and idempotency
+  public async addToQueue(user: RealtimeUser) {
+    return this.withQueueLock(async () => {
+      // 1. Prevent duplicate queue entries
+      this.removeFromQueue(user.id);
+
+      // 2. If user is already in an active room, close the previous room cleanly
+      for (const [roomId, room] of this.activeRooms.entries()) {
+        if (room.participants.some((p) => p.id === user.id)) {
+          await this.leaveRoom(roomId, user.id);
+        }
+      }
 
     // 3. Score all candidates in the queue using centralized Privacy & Matching policy
     const scoredCandidates: Array<{ entry: MatchQueueEntry; scoreResult: MatchScoreResult }> = [];
@@ -290,6 +310,7 @@ export class RealtimeServerEngine {
       this.broadcastPresence();
       return { matched: false };
     }
+    });
   }
 
   public removeFromQueue(userId: string) {

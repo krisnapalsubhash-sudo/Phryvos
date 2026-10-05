@@ -30,7 +30,8 @@ export async function GET(
     const { searchParams } = new URL(request.url);
 
     const cursor = searchParams.get('cursor');
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    const parsedLimit = parseInt(searchParams.get('limit') || '20', 10);
+    const limit = Math.min(Math.max(isNaN(parsedLimit) ? 20 : parsedLimit, 1), 50);
 
     // Verify post exists
     const post = await prisma.post.findUnique({
@@ -46,7 +47,8 @@ export async function GET(
       where: { postId: id },
       take: limit + 1,
       cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { createdAt: 'desc' },
+      skip: cursor ? 1 : 0,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         author: { select: USER_PUBLIC_FIELDS },
       },
@@ -107,14 +109,14 @@ export async function POST(
     // Verify post exists
     const post = await prisma.post.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, authorId: true },
     });
 
     if (!post) {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    // Atomic transaction: create comment and increment post commentsCount
+    // Atomic transaction: create comment, increment post commentsCount, and notify author
     const comment = await prisma.$transaction(async (tx) => {
       const created = await tx.comment.create({
         data: {
@@ -131,6 +133,19 @@ export async function POST(
         where: { id },
         data: { commentsCount: { increment: 1 } },
       });
+
+      if (post.authorId !== session.user.id) {
+        await tx.notification.create({
+          data: {
+            userId: post.authorId,
+            actorId: session.user.id,
+            type: 'COMMENT',
+            title: 'New Comment',
+            body: `${session.user.name || 'Someone'} commented on your post`,
+            data: JSON.stringify({ postId: id, commentId: created.id }),
+          },
+        });
+      }
 
       return created;
     });

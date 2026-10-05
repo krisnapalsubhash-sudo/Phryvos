@@ -98,7 +98,7 @@ export const postFormatSchema = z.enum(['STANDARD', 'RAW', 'VOICE', 'MIDNIGHT'])
 
 // Post creation schema
 export const createPostSchema = z.object({
-  content: z.string().min(1, 'Content is required').max(10000, 'Content too long'),
+  content: z.string().trim().min(1, 'Content is required').max(10000, 'Content too long'),
   format: postFormatSchema.default('STANDARD'),
   image: z.string().url('Invalid image URL').optional().nullable(),
   audioDuration: z.number().int().min(1).max(300).optional().nullable(), // max 5 min
@@ -118,7 +118,7 @@ export const updatePostSchema = createPostSchema.partial().extend({
 // Comment schema
 export const createCommentSchema = z.object({
   postId: z.string().min(1, 'Post ID required'),
-  content: z.string().min(1, 'Comment cannot be empty').max(2000, 'Comment too long'),
+  content: z.string().trim().min(1, 'Comment cannot be empty').max(2000, 'Comment too long'),
 });
 
 // Profile update schema
