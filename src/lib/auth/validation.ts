@@ -34,6 +34,9 @@ export const RESERVED_USERNAMES = new Set([
   'terms',
   'privacy',
   'onboarding',
+  'search',
+  'messages',
+  'notifications',
 ]);
 
 /**

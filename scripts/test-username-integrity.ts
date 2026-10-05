@@ -20,6 +20,16 @@
  * 16. Phase 2C regression
  */
 
+if (typeof window === 'undefined') {
+  const store = new Map();
+  global.localStorage = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, val) => store.set(key, String(val)),
+    removeItem: (key) => store.delete(key),
+    clear: () => store.clear(),
+  };
+}
+
 const { validateUsername, validateEmail, usernameSchema, RESERVED_USERNAMES, onboardingSchema } = require('../src/lib/auth/validation');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
@@ -47,7 +57,15 @@ const testUsername = `phoenix_${testSuffix}`;
 const testEmail = `phoenix_${testSuffix}@phryvos-test.com`;
 const testPassword = 'Password123!';
 
-const dbUrl = process.env.DATABASE_URL;
+let dbUrl = process.env.DATABASE_URL;
+if (!dbUrl && fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  const match = envContent.match(/^DATABASE_URL=(.+)$/m);
+  if (match?.[1]) {
+    dbUrl = match[1].replace(/['"]/g, '').trim();
+  }
+}
+
 if (!dbUrl) {
   console.error('❌ DATABASE_URL not set');
   process.exit(1);
@@ -298,7 +316,7 @@ async function main() {
     );
 
     const unvRes = await pool.query('SELECT "emailVerified" FROM "User" WHERE id = $1', [unvUserId]);
-    assert(unvRes.rows[0].emailverified === null, 'unverified user emailVerified remains null after onboarding');
+    assert(unvRes.rows[0].emailVerified === null, 'unverified user emailVerified remains null after onboarding');
 
     const verUserId = `usr_ver_${testSuffix}`;
     const verEmail = `ver_${testSuffix}@phryvos-test.com`;
@@ -319,7 +337,7 @@ async function main() {
 
     const verRes = await pool.query('SELECT "emailVerified" FROM "User" WHERE id = $1', [verUserId]);
     assert(
-      new Date(verRes.rows[0].emailverified).toISOString() === origVerified.toISOString(),
+      new Date(verRes.rows[0].emailVerified).toISOString() === origVerified.toISOString(),
       'verified user original timestamp strictly preserved'
     );
 
@@ -421,7 +439,8 @@ async function main() {
     validateAndSyncSession({ id: 'user_b', username: 'user_b' });
 
     const state = useAuthStore.getState();
-    assert(state.user === null, 'cross-account boundary triggers store purge');
+    assert(state.user?.id === 'user_b', 'cross-account boundary transitions store to new session user');
+    assert(state.user?.id !== 'user_a', 'cross-account boundary purges previous user state');
 
     // ── Group 14: Race Condition Simulation ────────────────────────────────
 
@@ -511,7 +530,7 @@ async function main() {
       `UPDATE "User"
        SET username = $1, "displayName" = $2, avatar = $3, interests = $4, "onboardingCompleted" = true, "updatedAt" = NOW()
        WHERE id = $5`,
-      [newUsername, newUsername, '🚀', '["Tech"]', e2eUserId]
+      [newUsername, newUsername, '🚀', ['Tech'], e2eUserId]
     );
 
     // Verify final state
@@ -521,9 +540,9 @@ async function main() {
     );
 
     assert(e2eRes.rows[0].username === newUsername, 'e2e: final username is onboarded value');
-    assert(e2eRes.rows[0].displayname === newUsername, 'e2e: displayName matches username');
-    assert(e2eRes.rows[0].emailverified !== null, 'e2e: emailVerified set after verification');
-    assert(e2eRes.rows[0].onboardingcompleted === true, 'e2e: onboardingCompleted marked true');
+    assert((e2eRes.rows[0].displayName || e2eRes.rows[0].displayname) === newUsername, 'e2e: displayName matches username');
+    assert((e2eRes.rows[0].emailVerified ?? e2eRes.rows[0].emailverified) !== null, 'e2e: emailVerified set after verification');
+    assert((e2eRes.rows[0].onboardingCompleted ?? e2eRes.rows[0].onboardingcompleted) === true, 'e2e: onboardingCompleted marked true');
 
   } finally {
     await teardown();

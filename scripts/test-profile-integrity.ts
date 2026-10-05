@@ -562,10 +562,10 @@ console.log('\nTest Group 19: ProfileView fallback safety');
 {
   const profileView = readTS('components/profile/ProfileView.tsx');
 
-  // Must fall back to CURRENT_USER when authUser is null
+  // Must safely resolve user without mock CURRENT_USER fallback
   assert(
-    profileView.includes('CURRENT_USER') && profileView.includes('getUserById'),
-    'ProfileView falls back to mock data when authUser is unavailable'
+    !profileView.includes('CURRENT_USER') && (profileView.includes('resolvedUser') || profileView.includes('authUser')),
+    'ProfileView safely resolves user without mock CURRENT_USER'
   );
 
   // isOwnProfile must be correctly computed
@@ -583,7 +583,7 @@ console.log('\nTest Group 20: No client-side userId injection in mutations');
     const { stdout } = await execFileAsync(
       'grep',
       ['-rn', 'body\\.userId|req\\.body\\.userId|query\\.userId|params\\.userId', 'src/app/api/', '--include=*.ts'],
-      { cwd: '/root/phryvos-repo', encoding: 'utf8' }
+      { cwd: process.cwd(), encoding: 'utf8' }
     );
     const matches = stdout.trim();
     assert(!matches, 'No API route uses body/query/param userId as mutation target');

@@ -96,10 +96,11 @@ async function runConnectionIntegrityTests() {
     // ── TEST 1: A follows B creates only A→B, NOT B→A ──────────────────
     console.log('\n--- Test 1: Directed Follow (A → B only, no reciprocal) ---');
     
+    const connId1 = `conn_${Date.now()}_1`;
     await pool.query(
-      `INSERT INTO "Connection" ("userId", "connectedUserId", "connectedAt")
-       VALUES ($1, $2, NOW()) ON CONFLICT DO NOTHING`,
-      [userA.id, userB.id]
+      `INSERT INTO "Connection" ("id", "userId", "connectedUserId", "connectedAt")
+       VALUES ($1, $2, $3, NOW()) ON CONFLICT DO NOTHING`,
+      [connId1, userA.id, userB.id]
     );
     
     const abConnection = await pool.query(
@@ -128,10 +129,11 @@ async function runConnectionIntegrityTests() {
     
     // Try to insert duplicate (should fail due to unique constraint)
     try {
+      const connIdDup = `conn_${Date.now()}_dup`;
       await pool.query(
-        `INSERT INTO "Connection" ("userId", "connectedUserId", "connectedAt")
-         VALUES ($1, $2, NOW())`,
-        [userA.id, userB.id]
+        `INSERT INTO "Connection" ("id", "userId", "connectedUserId", "connectedAt")
+         VALUES ($1, $2, $3, NOW())`,
+        [connIdDup, userA.id, userB.id]
       );
       countingAssert(false, 'Duplicate connection should be rejected by unique constraint');
     } catch (err: any) {
@@ -148,10 +150,11 @@ async function runConnectionIntegrityTests() {
     console.log('\n--- Test 4: Unfollow Removes Only Directed Edge ---');
     
     // Create B→A connection (simulating B following A)
+    const connIdBA = `conn_${Date.now()}_ba`;
     await pool.query(
-      `INSERT INTO "Connection" ("userId", "connectedUserId", "connectedAt")
-       VALUES ($1, $2, NOW())`,
-      [userB.id, userA.id]
+      `INSERT INTO "Connection" ("id", "userId", "connectedUserId", "connectedAt")
+       VALUES ($1, $2, $3, NOW())`,
+      [connIdBA, userB.id, userA.id]
     );
     
     // Now A unfollows B (should only remove A→B)
@@ -180,10 +183,11 @@ async function runConnectionIntegrityTests() {
     await pool.query(`UPDATE "User" SET "followers" = 0, "following" = 0 WHERE id = $1`, [userB.id]);
     
     // Create A→B connection
+    const connId5 = `conn_${Date.now()}_5`;
     await pool.query(
-      `INSERT INTO "Connection" ("userId", "connectedUserId", "connectedAt")
-       VALUES ($1, $2, NOW())`,
-      [userA.id, userB.id]
+      `INSERT INTO "Connection" ("id", "userId", "connectedUserId", "connectedAt")
+       VALUES ($1, $2, $3, NOW())`,
+      [connId5, userA.id, userB.id]
     );
     await pool.query(`UPDATE "User" SET "following" = "following" + 1 WHERE id = $1`, [userA.id]);
     await pool.query(`UPDATE "User" SET "followers" = "followers" + 1 WHERE id = $1`, [userB.id]);
