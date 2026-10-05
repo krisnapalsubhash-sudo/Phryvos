@@ -24,10 +24,39 @@ export default function LoginClient({ callbackUrl }: LoginClientProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isUnverified, setIsUnverified] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  const handleResendVerification = async () => {
+    if (!identifier.trim()) {
+      toast.error('Please enter your email or username above.');
+      return;
+    }
+    setResending(true);
+    sound.playPop(480);
+    try {
+      const res = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: identifier.trim().toLowerCase() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success(data.message || 'Verification link sent! Check your inbox.');
+      } else {
+        toast.error(data.error || 'Failed to send verification link.');
+      }
+    } catch {
+      toast.error('Network error while resending verification.');
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsUnverified(false);
     if (!identifier.trim()) { setError('Please enter your username or email'); return; }
     if (!password.trim()) { setError('Please enter your password'); return; }
 
@@ -43,7 +72,12 @@ export default function LoginClient({ callbackUrl }: LoginClientProps) {
       });
 
       if (result?.error) {
-        setError(result.error);
+        if (result.error.includes('EMAIL_NOT_VERIFIED') || result.error.toLowerCase().includes('verify your email')) {
+          setIsUnverified(true);
+          setError('Please verify your email address before logging in.');
+        } else {
+          setError(result.error);
+        }
         sound.playPop(300);
       } else {
         sound.playMatchChord();
@@ -206,13 +240,23 @@ export default function LoginClient({ callbackUrl }: LoginClientProps) {
               </div>
 
               {error && (
-                <motion.p
+                <motion.div
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="text-xs text-destructive font-medium"
+                  className="space-y-1"
                 >
-                  {error}
-                </motion.p>
+                  <p className="text-xs text-destructive font-medium">{error}</p>
+                  {isUnverified && (
+                    <button
+                      type="button"
+                      onClick={handleResendVerification}
+                      disabled={resending}
+                      className="text-xs text-primary hover:underline font-semibold flex items-center gap-1.5"
+                    >
+                      {resending ? 'Sending verification email...' : '✉ Resend verification email'}
+                    </button>
+                  )}
+                </motion.div>
               )}
 
               <Button

@@ -1,66 +1,174 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, Sparkles, ArrowRight, Loader2, Check } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Check, AlertCircle } from 'lucide-react';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { sound } from '@/lib/sound';
 import { toast } from 'sonner';
+import { validateUsername, validateEmail } from '@/lib/auth/validation';
+
+type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'error';
 
 export default function RegisterPage() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [usernameAvailable, setUsernameAvailable] = useState<null | boolean>(null);
 
-  const checkUsernameAvailability = async (value: string) => {
-    if (value.length < 3) {
-      setUsernameAvailable(null);
+  // Username status tracking with race-condition protection
+  const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
+  const [usernameStatusReason, setUsernameStatusReason] = useState<string>('');
+  const usernameCheckSeqRef = useRef<number>(0);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const checkAvailability = useCallback(async (value: string) => {
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed || trimmed.length < 3) {
+      setUsernameStatus('idle');
+      setUsernameStatusReason('');
       return;
     }
-    try {
-      const res = await fetch(`/api/auth/check-username?username=${encodeURIComponent(value.toLowerCase())}`);
-      const data = await res.json();
-      setUsernameAvailable(data.available);
-    } catch {
-      setUsernameAvailable(null);
+
+    // Client-side syntax & reserved name validation first
+    const localValidation = validateUsername(trimmed);
+    if (!localValidation.valid) {
+      setUsernameStatus('invalid');
+      setUsernameStatusReason(localValidation.error || 'Invalid username');
+      return;
     }
+
+    // Increment request ID to ignore stale / out-of-order responses
+    const currentSeq = ++usernameCheckSeqRef.current;
+    setUsernameStatus('checking');
+    setUsernameStatusReason('');
+
+    try {
+      const res = await fetch(`/api/auth/check-username?username=${encodeURIComponent(trimmed)}`);
+      const data = await res.json();
+
+      // Discard if a newer request was dispatched
+      if (currentSeq !== usernameCheckSeqRef.current) {
+        return;
+      }
+
+      if (res.ok && data.available) {
+        setUsernameStatus('available');
+        setUsernameStatusReason('Available');
+      } else if (data.error === 'USERNAME_TAKEN' || !data.available) {
+        setUsernameStatus('taken');
+        setUsernameStatusReason(data.reason || 'Username is already taken');
+      } else {
+        setUsernameStatus('error');
+        setUsernameStatusReason(data.message || 'Unable to check availability');
+      }
+    } catch {
+      if (currentSeq === usernameCheckSeqRef.current) {
+        setUsernameStatus('error');
+        setUsernameStatusReason('Network error checking availability');
+      }
+    }
+  }, []);
+
+  const handleUsernameChange = (raw: string) => {
+    // Only allow alphanumeric and underscore characters
+    const clean = raw.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+    setUsername(clean);
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    if (clean.length < 3) {
+      setUsernameStatus('idle');
+      setUsernameStatusReason('');
+      return;
+    }
+
+    // Debounce the network request by 350ms
+    debounceTimerRef.current = setTimeout(() => {
+      checkAvailability(clean);
+    }, 350);
   };
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    // Client-side validation
-    if (!username.trim()) { setError('Please enter a username'); return; }
-    if (username.length < 3) { setError('Username must be at least 3 characters'); return; }
-    if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(username)) {
-      setError('Username must start with a letter and contain only letters, numbers, and underscores');
+    // 1. Username validation
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid || !usernameValidation.normalized) {
+      setError(usernameValidation.error || 'Please enter a valid username');
+      sound.playPop(300);
       return;
     }
-    if (usernameAvailable === false) {
-      setError('Username is already taken');
+    if (usernameStatus === 'taken') {
+      setError('Username is already taken. Please choose another.');
+      sound.playPop(300);
       return;
     }
-    if (!email.trim()) { setError('Please enter your email'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('Please enter a valid email address');
+
+    // 2. Email validation
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.valid || !emailValidation.normalized) {
+      setError(emailValidation.error || 'Please enter a valid email address');
+      sound.playPop(300);
       return;
     }
-    if (!password.trim()) { setError('Please enter a password'); return; }
-    if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
-    if (!/[A-Z]/.test(password)) { setError('Password must contain at least one uppercase letter'); return; }
-    if (!/[a-z]/.test(password)) { setError('Password must contain at least one lowercase letter'); return; }
-    if (!/[0-9]/.test(password)) { setError('Password must contain at least one number'); return; }
-    if (!/[^A-Za-z0-9]/.test(password)) { setError('Password must contain at least one special character'); return; }
+
+    // 3. Password validation
+    if (!password) {
+      setError('Please enter a password');
+      sound.playPop(300);
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      sound.playPop(300);
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setError('Password must contain at least one uppercase letter');
+      sound.playPop(300);
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setError('Password must contain at least one lowercase letter');
+      sound.playPop(300);
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      setError('Password must contain at least one number');
+      sound.playPop(300);
+      return;
+    }
+    if (!/[^A-Za-z0-9]/.test(password)) {
+      setError('Password must contain at least one special character');
+      sound.playPop(300);
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      sound.playPop(300);
+      return;
+    }
 
     setLoading(true);
     sound.playPop(480);
@@ -70,25 +178,42 @@ export default function RegisterPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: username.trim().toLowerCase(),
-          email: email.trim().toLowerCase(),
+          username: usernameValidation.normalized,
+          email: emailValidation.normalized,
           password,
+          confirmPassword,
         }),
       });
 
       const data = await res.json();
 
-      if (!res.ok) {
-        setError(data.error || 'Registration failed');
+      if (!res.ok || !data.success) {
+        if (data.code === 'USERNAME_TAKEN') {
+          setError('This username is already registered. Please choose another.');
+          setUsernameStatus('taken');
+        } else if (data.code === 'EMAIL_ALREADY_EXISTS') {
+          setError('An account with this email already exists. Try signing in.');
+        } else if (data.code === 'RATE_LIMITED') {
+          setError('Too many registration attempts. Please wait a moment and try again.');
+        } else if (data.code === 'VALIDATION_ERROR' && data.details) {
+          const firstField = Object.keys(data.details)[0];
+          setError(data.details[firstField]?.[0] || 'Please review your input fields.');
+        } else {
+          setError(data.error || 'Registration could not be completed. Please try again.');
+        }
         sound.playPop(300);
         return;
       }
 
       sound.playMatchChord();
-      toast.success('Account created! Please verify your email to continue.');
-      router.push('/login?registered=true');
+      toast.success(
+        data.emailSent
+          ? 'Account created! Please check your email to verify your account.'
+          : 'Account created! Please verify your email before logging in.'
+      );
+      router.push(`/login?registered=true&email=${encodeURIComponent(emailValidation.normalized)}`);
     } catch {
-      setError('Something went wrong. Please try again.');
+      setError('Network connection error. Please check your internet connection and try again.');
       sound.playPop(300);
     } finally {
       setLoading(false);
@@ -127,6 +252,7 @@ export default function RegisterPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Username Input with Debounced Realtime Verification */}
             <div>
               <label className="text-xs font-semibold text-foreground mb-1.5 block">Username</label>
               <div className="relative">
@@ -134,37 +260,51 @@ export default function RegisterPage() {
                 <Input
                   type="text"
                   value={username}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
-                    setUsername(value);
-                    checkUsernameAvailability(value);
-                  }}
+                  onChange={(e) => handleUsernameChange(e.target.value)}
                   placeholder="Choose a username"
-                  className="bg-secondary/40 border-border/70 text-xs sm:text-sm rounded-xl h-10 pl-8"
+                  className="bg-secondary/40 border-border/70 text-xs sm:text-sm rounded-xl h-10 pl-8 pr-28"
                   autoFocus
                   maxLength={20}
+                  disabled={loading}
                 />
-                {username.length >= 3 && usernameAvailable !== null && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs">
-                    {usernameAvailable ? (
-                      <span className="text-emerald-500 flex items-center gap-1">
-                        <Check className="w-3 h-3" />
-                        Available
-                      </span>
-                    ) : (
-                      <span className="text-destructive">Taken</span>
-                    )}
-                  </div>
-                )}
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-xs">
+                  {usernameStatus === 'checking' && (
+                    <span className="text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    </span>
+                  )}
+                  {usernameStatus === 'available' && (
+                    <span className="text-emerald-500 flex items-center gap-1 font-medium">
+                      <Check className="w-3.5 h-3.5" />
+                      Available
+                    </span>
+                  )}
+                  {usernameStatus === 'taken' && (
+                    <span className="text-destructive flex items-center gap-1 font-medium">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Taken
+                    </span>
+                  )}
+                  {usernameStatus === 'invalid' && (
+                    <span className="text-destructive flex items-center gap-1 font-medium">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Invalid
+                    </span>
+                  )}
+                  {usernameStatus === 'error' && (
+                    <span className="text-amber-500 flex items-center gap-1 font-medium">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Error
+                    </span>
+                  )}
+                </div>
               </div>
-              {username.length > 0 && username.length < 3 && (
-                <p className="text-xs text-destructive mt-1.5">At least 3 characters</p>
-              )}
-              {username.length > 0 && !/^[a-zA-Z]/.test(username) && (
-                <p className="text-xs text-destructive mt-1.5">Must start with a letter</p>
+              {usernameStatusReason && usernameStatus !== 'available' && usernameStatus !== 'checking' && (
+                <p className="text-[11px] text-destructive mt-1">{usernameStatusReason}</p>
               )}
             </div>
 
+            {/* Email Input */}
             <div>
               <label className="text-xs font-semibold text-foreground mb-1.5 block">Email</label>
               <Input
@@ -173,9 +313,12 @@ export default function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value.toLowerCase())}
                 placeholder="name@example.com"
                 className="bg-secondary/40 border-border/70 text-xs sm:text-sm rounded-xl h-10"
+                disabled={loading}
+                maxLength={254}
               />
             </div>
 
+            {/* Password Input */}
             <div>
               <label className="text-xs font-semibold text-foreground mb-1.5 block">Password</label>
               <div className="relative">
@@ -185,35 +328,72 @@ export default function RegisterPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="At least 8 chars: upper, lower, number, special"
                   className="bg-secondary/40 border-border/70 text-xs sm:text-sm rounded-xl h-10 pr-10"
+                  disabled={loading}
+                  maxLength={128}
                 />
                 <button
                   type="button"
                   onClick={() => { setShowPassword(!showPassword); sound.playPop(400); }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <div className="text-[10px] text-muted-foreground space-y-0.5">
-                <p className="flex items-center gap-1">
+              <div className="text-[10px] text-muted-foreground space-y-0.5 mt-1.5">
+                <p className={`flex items-center gap-1 ${password.length >= 8 ? 'text-emerald-500 font-medium' : ''}`}>
                   <Check className="w-3 h-3" /> At least 8 characters
                 </p>
-                <p className="flex items-center gap-1">
+                <p className={`flex items-center gap-1 ${/[A-Z]/.test(password) ? 'text-emerald-500 font-medium' : ''}`}>
                   <Check className="w-3 h-3" /> One uppercase letter
                 </p>
-                <p className="flex items-center gap-1">
+                <p className={`flex items-center gap-1 ${/[a-z]/.test(password) ? 'text-emerald-500 font-medium' : ''}`}>
                   <Check className="w-3 h-3" /> One lowercase letter
                 </p>
-                <p className="flex items-center gap-1">
+                <p className={`flex items-center gap-1 ${/[0-9]/.test(password) ? 'text-emerald-500 font-medium' : ''}`}>
                   <Check className="w-3 h-3" /> One number
                 </p>
-                <p className="flex items-center gap-1">
+                <p className={`flex items-center gap-1 ${/[^A-Za-z0-9]/.test(password) ? 'text-emerald-500 font-medium' : ''}`}>
                   <Check className="w-3 h-3" /> One special character
                 </p>
               </div>
             </div>
 
-            {error && <p className="text-xs text-destructive font-medium">{error}</p>}
+            {/* Confirm Password Input */}
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1.5 block">Confirm Password</label>
+              <div className="relative">
+                <Input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter your password"
+                  className="bg-secondary/40 border-border/70 text-xs sm:text-sm rounded-xl h-10 pr-10"
+                  disabled={loading}
+                  maxLength={128}
+                />
+                <button
+                  type="button"
+                  onClick={() => { setShowConfirmPassword(!showConfirmPassword); sound.playPop(400); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {confirmPassword.length > 0 && (
+                <p className={`text-[10px] mt-1 ${confirmPassword === password ? 'text-emerald-500 font-medium' : 'text-destructive'}`}>
+                  {confirmPassword === password ? '✓ Passwords match' : '✗ Passwords do not match'}
+                </p>
+              )}
+            </div>
+
+            {error && (
+              <div className="p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            )}
 
             <Button
               type="submit"
@@ -222,15 +402,11 @@ export default function RegisterPage() {
             >
               {loading ? (
                 <span className="flex items-center gap-2">
-                  <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
-                    className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full"
-                  />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                   Creating account...
                 </span>
               ) : (
-                'Get Started'
+                'Create Account'
               )}
             </Button>
           </form>

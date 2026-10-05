@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const RESERVED_USERNAMES = new Set([
+export const RESERVED_USERNAMES = new Set([
   'admin',
   'administrator',
   'root',
@@ -18,46 +18,149 @@ const RESERVED_USERNAMES = new Set([
   'me',
   'null',
   'undefined',
+  'demo',
+  'demo_user',
+  'anonymous',
+  'feed',
+  'chat',
+  'radar',
+  'profile',
+  'settings',
+  'dashboard',
+  'login',
+  'register',
+  'logout',
+  'auth',
+  'terms',
+  'privacy',
+  'onboarding',
 ]);
 
-// Username: 3-20 chars, alphanumeric + underscore, must start with letter, cannot be reserved
-export const usernameSchema = z
-  .string()
-  .min(3, 'Username must be at least 3 characters')
-  .max(20, 'Username must be at most 20 characters')
-  .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, 'Username must start with a letter and contain only letters, numbers, and underscores')
-  .transform((val) => val.toLowerCase().trim())
-  .refine((val) => !RESERVED_USERNAMES.has(val), {
-    message: 'This username is reserved and cannot be used',
-  });
+/**
+ * Validates a username against canonical Phryvos rules:
+ * - 3 to 20 characters
+ * - Trimmed and lowercased
+ * - Must start with a letter (a-z)
+ * - May contain letters, numbers, and single underscores
+ * - Must end with a letter or number (no trailing underscore)
+ * - No consecutive underscores (__)
+ * - Cannot be a reserved username
+ */
+export function validateUsername(input: unknown): { valid: boolean; error?: string; normalized?: string } {
+  if (typeof input !== 'string') {
+    return { valid: false, error: 'Username must be a string' };
+  }
 
-// Email: normalize, validate format
-export const emailSchema = z
-  .string()
-  .min(1, 'Email is required')
-  .email('Invalid email format')
-  .max(254, 'Email is too long')
-  .transform((email) => email.toLowerCase().trim());
+  const trimmed = input.trim().toLowerCase();
 
-// Password: min 8 chars, require uppercase, lowercase, number, special char
+  if (trimmed.length < 3) {
+    return { valid: false, error: 'Username must be at least 3 characters' };
+  }
+  if (trimmed.length > 20) {
+    return { valid: false, error: 'Username must be at most 20 characters' };
+  }
+  if (!/^[a-z]/.test(trimmed)) {
+    return { valid: false, error: 'Username must start with a letter' };
+  }
+  if (!/^[a-z0-9_]+$/.test(trimmed)) {
+    return { valid: false, error: 'Username can only contain letters, numbers, and underscores' };
+  }
+  if (/__/.test(trimmed)) {
+    return { valid: false, error: 'Username cannot contain consecutive underscores' };
+  }
+  if (trimmed.endsWith('_')) {
+    return { valid: false, error: 'Username cannot end with an underscore' };
+  }
+  if (RESERVED_USERNAMES.has(trimmed)) {
+    return { valid: false, error: 'This username is reserved and cannot be used' };
+  }
+
+  return { valid: true, normalized: trimmed };
+}
+
+// Canonical Username Zod Schema
+export const usernameSchema = z.preprocess(
+  (val) => (typeof val === 'string' ? val.trim().toLowerCase() : val),
+  z
+    .string()
+    .min(3, 'Username must be at least 3 characters')
+    .max(20, 'Username must be at most 20 characters')
+    .regex(/^[a-z]/, 'Username must start with a letter')
+    .regex(/^[a-z0-9_]+$/, 'Username can only contain letters, numbers, and underscores')
+    .regex(/^[a-z0-9_]*[a-z0-9]$/, 'Username cannot end with an underscore')
+    .refine((val) => !/__/.test(val), {
+      message: 'Username cannot contain consecutive underscores',
+    })
+    .refine((val) => !RESERVED_USERNAMES.has(val), {
+      message: 'This username is reserved and cannot be used',
+    })
+);
+
+/**
+ * Validates an email against canonical Phryvos rules
+ */
+export function validateEmail(input: unknown): { valid: boolean; error?: string; normalized?: string } {
+  if (typeof input !== 'string') {
+    return { valid: false, error: 'Email must be a string' };
+  }
+
+  const trimmed = input.trim().toLowerCase();
+  if (!trimmed) {
+    return { valid: false, error: 'Email is required' };
+  }
+  if (trimmed.length > 254) {
+    return { valid: false, error: 'Email is too long' };
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(trimmed)) {
+    return { valid: false, error: 'Invalid email format' };
+  }
+
+  return { valid: true, normalized: trimmed };
+}
+
+// Canonical Email Zod Schema
+export const emailSchema = z.preprocess(
+  (val) => (typeof val === 'string' ? val.trim().toLowerCase() : val),
+  z
+    .string()
+    .min(1, 'Email is required')
+    .max(254, 'Email is too long')
+    .email('Invalid email format')
+);
+
+// Canonical Password Zod Schema: min 8, max 128, upper, lower, number, special char
 export const passwordSchema = z
   .string()
   .min(8, 'Password must be at least 8 characters')
-  .max(128, 'Password is too long')
+  .max(128, 'Password cannot exceed 128 characters')
   .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
   .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
   .regex(/[0-9]/, 'Password must contain at least one number')
   .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character');
 
 export const loginSchema = z.object({
-  username: z.string().min(1, 'Username or email is required'),
+  identifier: z.string().min(1, 'Username or email is required').trim(),
   password: z.string().min(1, 'Password is required'),
 });
 
-export const registerSchema = z.object({
-  username: usernameSchema,
+export const registerSchema = z
+  .object({
+    username: usernameSchema,
+    email: emailSchema,
+    password: passwordSchema,
+    confirmPassword: z.string().optional(),
+  })
+  .refine(
+    (data) => !data.confirmPassword || data.password === data.confirmPassword,
+    {
+      message: 'Passwords do not match',
+      path: ['confirmPassword'],
+    }
+  );
+
+export const resendVerificationSchema = z.object({
   email: emailSchema,
-  password: passwordSchema,
 });
 
 export const onboardingSchema = z.object({

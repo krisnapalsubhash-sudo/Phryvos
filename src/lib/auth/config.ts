@@ -163,6 +163,12 @@ function createAuthConfig() {
             }
           }
 
+          // Enforcement of Option A Email Verification Policy:
+          // Unverified users are blocked from logging in with credentials until their email is confirmed.
+          // Demo accounts or pre-verified OAuth accounts are exempt.
+          if (!user.emailVerified && !user.demoMode) {
+            throw new Error('EMAIL_NOT_VERIFIED: Please verify your email before logging in. Check your inbox for the verification link.');
+          }
 
           return {
             id: user.id,
