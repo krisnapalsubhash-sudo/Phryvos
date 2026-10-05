@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { MOCK_POSTS } from '@/lib/mock';
 import type { Post } from '@/types';
 import { getSessionEpoch, isStaleRequest } from '@/lib/auth/session-epoch';
 
@@ -24,6 +23,7 @@ interface PostsState {
   posts: Post[];
   loading: boolean;
   error: string | null;
+  initialized: boolean;
 
   // Local mutations (optimistic)
   setOwnerUserId: (userId: string | null) => void;
@@ -64,18 +64,20 @@ export const usePostsStore = create<PostsState>()(
   persist(
     (set, get) => ({
       ownerUserId: null,
-      posts: MOCK_POSTS,
+      posts: [],
       loading: false,
       error: null,
+      initialized: false,
 
       setOwnerUserId: (userId) => set({ ownerUserId: userId }),
 
       reset: () =>
         set({
           ownerUserId: null,
-          posts: MOCK_POSTS,
+          posts: [],
           loading: false,
           error: null,
+          initialized: false,
         }),
 
       // Local optimistic updates
@@ -102,7 +104,7 @@ export const usePostsStore = create<PostsState>()(
           posts: state.posts.filter((p) => p.id !== postId),
         })),
 
-      setPosts: (posts: Post[]) => set({ posts }),
+      setPosts: (posts: Post[]) => set({ posts, initialized: true }),
 
       // API-backed actions
       fetchFeed: async (cursor?: string) => {
@@ -118,6 +120,7 @@ export const usePostsStore = create<PostsState>()(
             set((state) => ({
               posts: cursor ? [...state.posts, ...data.posts] : data.posts,
               loading: false,
+              initialized: true,
             }));
           } else {
             set({ loading: false, error: 'Failed to fetch feed' });

@@ -6,17 +6,16 @@ import { usePathname } from 'next/navigation';
 import { Search, MessageSquare, Heart, Plus, Menu, X, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
 import { useUIStore } from '@/store/ui';
-import { CURRENT_USER } from '@/lib/mock';
-import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { SoundToggle } from '@/components/effects/SoundToggle';
+import { Button } from '@/components/ui/button';
 import { sound } from '@/lib/sound';
 
 export function TopBar() {
   const pathname = usePathname();
   const { user } = useAuthStore();
   const { sidebarOpen, toggleSidebar } = useUIStore();
-  const displayUser = user || CURRENT_USER;
+  const displayUser = user;
   const [searchOpen, setSearchOpen] = useState(false);
   const isSearchPage = pathname === '/search' || pathname.startsWith('/search');
 
@@ -117,10 +116,10 @@ export function TopBar() {
           className="relative w-8 h-8 rounded-full overflow-hidden ring-2 ring-border/80 hover:ring-primary/60 transition-all flex items-center justify-center bg-secondary text-foreground text-sm font-semibold ml-1"
           aria-label="My Profile"
         >
-          {displayUser.avatar ? (
+          {displayUser?.avatar ? (
             <span>{displayUser.avatar}</span>
           ) : (
-            <span className="text-xs font-bold">{displayUser.displayName?.charAt(0) || 'U'}</span>
+            <span className="text-xs font-bold">{displayUser?.displayName?.charAt(0) || 'U'}</span>
           )}
         </Link>
       </div>

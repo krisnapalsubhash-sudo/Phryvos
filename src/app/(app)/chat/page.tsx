@@ -3,9 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { sound } from '@/lib/sound';
-import { getConversations } from '@/lib/mock/conversations';
-import type { Conversation, Message } from '@/types';
-import { CURRENT_USER } from '@/lib/mock';
+import type { Conversation, Message, User } from '@/types';
 import { ConversationSidebar } from '@/components/chat/ConversationSidebar';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
@@ -26,6 +24,26 @@ const SharedVaultModal = dynamic(
   { ssr: false }
 );
 
+function buildCurrentUserName(user: User | null): User {
+  if (!user) {
+    return {
+      id: 'unknown',
+      username: 'unknown',
+      displayName: 'You',
+      bio: '',
+      avatar: '😊',
+      interests: [],
+      followers: 0,
+      following: 0,
+      postsCount: 0,
+      isConnected: false,
+      isOnline: true,
+      createdAt: new Date().toISOString(),
+    };
+  }
+  return user;
+}
+
 export default function MasterChatPage() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -33,6 +51,8 @@ export default function MasterChatPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [vanishMode, setVanishMode] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Modals
   const [showMomentsModal, setShowMomentsModal] = useState(false);
@@ -42,56 +62,89 @@ export default function MasterChatPage() {
   // Connections store
   const { connections, addConnection } = useConnectionsStore();
   const { user } = useAuthStore();
-  const myUser = user || CURRENT_USER;
+  const myUser = buildCurrentUserName(user);
 
   useEffect(() => {
-    const baseChats = getConversations();
+    const fetchConversations = async () => {
+      try {
+        const res = await fetch('/api/conversations');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.conversations) {
+            // Convert API conversations to frontend format
+            const converted: Conversation[] = data.conversations.map((conv: any) => ({
+              id: conv.id,
+              participants: conv.participants.map((p: any) => ({
+                id: p.id,
+                username: p.username,
+                displayName: p.displayName,
+                avatar: p.avatar,
+                bio: p.bio || '',
+                interests: p.interests || [],
+                location: p.location || '',
+                followers: p.followers || 0,
+                following: p.following || 0,
+                postsCount: p.postsCount || 0,
+                isConnected: true,
+                isOnline: p.isOnline || false,
+                createdAt: p.createdAt || new Date().toISOString(),
+              })),
+              messages: (conv.messages || []).map((msg: any) => ({
+                id: msg.id,
+                senderId: msg.senderId,
+                receiverId: msg.receiverId,
+                content: msg.content,
+                type: msg.type as 'text' | 'voice' | 'image',
+                timestamp: msg.timestamp,
+                isRead: msg.isRead,
+              })),
+              unreadCount: conv.unreadCount || 0,
+              lastMessage: conv.lastMessage ? {
+                id: conv.lastMessage.id,
+                senderId: conv.lastMessage.senderId,
+                receiverId: conv.lastMessage.receiverId,
+                content: conv.lastMessage.content,
+                type: conv.lastMessage.type as 'text' | 'voice' | 'image',
+                timestamp: conv.lastMessage.timestamp,
+                isRead: conv.lastMessage.isRead,
+              } : undefined,
+            }));
 
-    // Map connections from Radar / Requests into conversation threads
-    const dynamicChats: Conversation[] = connections.map((conn) => {
-      const existing = baseChats.find((bc) =>
-        bc.participants.some((p) => p.id === conn.user.id)
-      );
-      if (existing) return existing;
+            // Merge with radar connections
+            const existingIds = new Set(converted.map(c => c.id));
+            const dynamicChats: Conversation[] = connections
+              .filter(conn => !existingIds.has(`conn-${conn.user.id}`))
+              .map(conn => ({
+                id: `conn-${conn.user.id}`,
+                participants: [myUser, conn.user],
+                messages: [],
+                unreadCount: 0,
+                lastMessage: conn.lastMessageAt ? {
+                  id: `last-${conn.user.id}`,
+                  senderId: conn.user.id,
+                  receiverId: myUser.id,
+                  content: conn.lastMessage || 'Connected via Phryvos Serendipity ✨',
+                  type: 'text',
+                  timestamp: conn.lastMessageAt,
+                  isRead: true,
+                } : undefined,
+              }));
 
-      return {
-        id: `conv-${conn.user.id}`,
-        participants: [myUser, conn.user],
-        messages: [
-          {
-            id: `m-init-${conn.user.id}`,
-            senderId: conn.user.id,
-            receiverId: myUser.id,
-            content: `Connected via Phryvos Serendipity ✨ Say hello!`,
-            type: 'text',
-            timestamp: conn.connectedAt || new Date().toISOString(),
-            isRead: true,
-          },
-        ],
-        unreadCount: 0,
-        lastMessage: {
-          id: `m-init-${conn.user.id}`,
-          senderId: conn.user.id,
-          receiverId: myUser.id,
-          content: conn.lastMessage || 'Connected via Serendipity ✨',
-          type: 'text',
-          timestamp: conn.lastMessageAt || conn.connectedAt || new Date().toISOString(),
-          isRead: true,
-        },
-        isTyping: false,
-      };
-    });
-
-    // Merge without duplicates
-    const all = [...dynamicChats];
-    baseChats.forEach((bc) => {
-      if (!all.some((c) => c.id === bc.id)) {
-        all.push(bc);
+            setConversations([...converted, ...dynamicChats]);
+          }
+        } else {
+          setFetchError('Failed to load conversations');
+        }
+      } catch (error) {
+        console.error('Conversations fetch error:', error);
+        setFetchError('Network error');
+      } finally {
+        setLoading(false);
       }
-    });
+    };
 
-    setConversations(all);
-  }, [connections, myUser]);
+    fetchConversations();
+  }, [connections, myUser.id]);
 
   useEffect(() => {
     if (selectedConversation) {
@@ -110,11 +163,11 @@ export default function MasterChatPage() {
     if (!text.trim() || !selectedConversation) return;
 
     sound.playMessageSent();
-    const other = selectedConversation.participants.find((p) => p.id !== 'me')!;
+    const other = selectedConversation.participants.find((p) => p.id !== myUser.id) || myUser;
 
     const newMsg: Message = {
       id: `m_${Date.now()}`,
-      senderId: 'me',
+      senderId: myUser.id,
       receiverId: other.id,
       content: text.trim(),
       type: 'text',
@@ -141,7 +194,7 @@ export default function MasterChatPage() {
         'Haha totally! That makes so much sense.',
         'I was literally just thinking about that earlier today! ✨',
         'That sounds super interesting! How long have you been doing that?',
-        'Count me in! Let’s definitely talk more about this.',
+        'Count me in! Let\'s definitely talk more about this.',
         'Love that perspective! 🙌',
       ];
       const replyText = replies[Math.floor(Math.random() * replies.length)];
@@ -149,7 +202,7 @@ export default function MasterChatPage() {
       const incomingMsg: Message = {
         id: `m_${Date.now() + 1}`,
         senderId: other.id,
-        receiverId: 'me',
+        receiverId: myUser.id,
         content: replyText,
         type: 'text',
         timestamp: new Date().toISOString(),
@@ -168,7 +221,7 @@ export default function MasterChatPage() {
   };
 
   const otherUser =
-    selectedConversation?.participants.find((p) => p.id !== 'me') || myUser;
+    selectedConversation?.participants.find((p) => p.id !== myUser.id) || myUser;
 
   return (
     <div className="relative min-h-[calc(100vh-4rem)] flex flex-col md:flex-row bg-background text-foreground transition-colors overflow-hidden">
@@ -211,7 +264,7 @@ export default function MasterChatPage() {
         />
       )}
 
-      {/* LEFT COLUMN: FRIENDS / ROOMS HUB (Hidden on mobile if chat open) */}
+      {/* LEFT COLUMN: FRIENDS / ROOMS HUB */}
       <ConversationSidebar
         conversations={conversations}
         selectedConversationId={selectedConversation?.id || null}

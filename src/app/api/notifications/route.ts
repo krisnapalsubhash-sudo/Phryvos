@@ -65,3 +65,36 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { readAll } = body;
+
+    if (readAll === true) {
+      // Mark all unread notifications for current user as read
+      await prisma.notification.updateMany({
+        where: {
+          userId: session.user.id,
+          isRead: false,
+        },
+        data: {
+          isRead: true,
+        },
+      });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Patch notifications error:', error);
+    return NextResponse.json(
+      { error: 'Failed to update notifications' },
+      { status: 500 }
+    );
+  }
+}

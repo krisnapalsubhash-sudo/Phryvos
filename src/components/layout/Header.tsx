@@ -10,13 +10,12 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
-import { CURRENT_USER } from '@/lib/mock';
 
 export function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   const { user } = useAuthStore();
 
-  const displayUser = user || CURRENT_USER;
+  const displayUser = user;
 
   return (
     <header className="desktop-only sticky top-0 z-50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b border-border flex items-center justify-between px-4 py-3 h-16">
@@ -58,7 +57,7 @@ export function Header() {
           className="w-8 h-8 rounded-full bg-muted flex items-center justify-center overflow-hidden hover:opacity-80 transition-opacity"
           aria-label="Profile"
         >
-          <span className="text-lg">{displayUser.avatar || '👤'}</span>
+          <span className="text-lg">{displayUser?.avatar || '👤'}</span>
         </Link>
       </div>
     </header>

@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { useStoriesStore } from '@/store/stories';
 import { useAuthStore } from '@/store/auth';
-import { CURRENT_USER } from '@/lib/mock';
 import { sound } from '@/lib/sound';
 import { Button } from '@/components/ui/button';
 import type { Story, StorySlide } from '@/types';
@@ -43,7 +42,7 @@ const GRADIENT_PRESETS = [
 export function CreateStoryModal({ isOpen, onClose }: CreateStoryModalProps) {
   const { addStory, openStory } = useStoriesStore();
   const { user } = useAuthStore();
-  const currentUser = user || CURRENT_USER;
+  const currentUser = user;
 
   const [mode, setMode] = useState<'photo' | 'voice' | 'midnight'>('photo');
 
@@ -126,7 +125,20 @@ export function CreateStoryModal({ isOpen, onClose }: CreateStoryModalProps) {
 
     const newStory: Story = {
       id: storyId,
-      author: currentUser,
+      author: currentUser || {
+        id: 'unknown',
+        username: 'unknown',
+        displayName: 'Unknown',
+        bio: '',
+        avatar: '❓',
+        interests: [],
+        followers: 0,
+        following: 0,
+        postsCount: 0,
+        isConnected: false,
+        isOnline: false,
+        createdAt: new Date().toISOString(),
+      },
       images: mode === 'photo' ? [newSlide.mediaUrl!] : [],
       views: 1,
       hasSeen: false,

@@ -25,7 +25,6 @@ import { usePostsStore } from '@/store/posts';
 import dynamic from 'next/dynamic';
 import { useAuthStore } from '@/store/auth';
 import { useFeaturesStore } from '@/store/features';
-import { CURRENT_USER } from '@/lib/mock';
 import { PostCard } from '@/components/feed/PostCard';
 import { StoriesBar } from '@/components/feed/StoriesBar';
 import { Button } from '@/components/ui/button';
@@ -60,7 +59,7 @@ export default function FeedPage() {
   const posts = usePostsStore((state) => state.posts);
   const addPost = usePostsStore((state) => state.addPost);
   const { user } = useAuthStore();
-  const currentUser = user || CURRENT_USER;
+  const currentUser = user;
   const { flags } = useFeaturesStore();
 
   const [activeFilter, setActiveFilter] = useState<FeedFilter>('all');
@@ -134,7 +133,20 @@ export default function FeedPage() {
             isOnline: true,
             createdAt: new Date().toISOString(),
           }
-        : currentUser,
+        : (currentUser || {
+            id: 'unknown',
+            username: 'unknown',
+            displayName: 'Unknown',
+            bio: '',
+            avatar: '❓',
+            interests: [],
+            followers: 0,
+            following: 0,
+            postsCount: 0,
+            isConnected: false,
+            isOnline: false,
+            createdAt: new Date().toISOString(),
+          }),
       content: postDraft.trim(),
       format: effectiveFormat,
       likes: 1,
@@ -358,7 +370,7 @@ export default function FeedPage() {
                 🎭
               </div>
             ) : (
-              <Avatar size="md" fallback={currentUser.avatar} className="ring-2 ring-border/50 shrink-0" />
+              <Avatar size="md" fallback={currentUser?.avatar || '😊'} className="ring-2 ring-border/50 shrink-0" />
             )}
 
             <div className="flex-1 min-w-0">

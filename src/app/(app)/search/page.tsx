@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -17,10 +17,11 @@ import {
   ArrowRight,
   CheckCircle2,
   Radio,
-  Compass
+  Compass,
+  Loader2
 } from 'lucide-react';
 import Link from 'next/link';
-import { MOCK_USERS } from '@/lib/mock/users';
+import type { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar } from '@/components/ui/avatar';
@@ -45,6 +46,9 @@ const POPULAR_TAGS = [
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   // Modals state
   const [isGamesOpen, setIsGamesOpen] = useState(false);
@@ -55,18 +59,48 @@ export default function SearchPage() {
   const [isDilemmasOpen, setIsDilemmasOpen] = useState(false);
   const [isVibesOpen, setIsVibesOpen] = useState(false);
 
-  // Filtered users for live search
-  const filteredUsers = MOCK_USERS.filter(
-    (u) =>
-      u.username.toLowerCase().includes(query.toLowerCase()) ||
-      u.displayName.toLowerCase().includes(query.toLowerCase()) ||
-      u.location?.toLowerCase().includes(query.toLowerCase()) ||
-      u.interests?.some((i) => i.toLowerCase().includes(query.toLowerCase()))
-  );
+  // Debounced API search
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (query.trim().length === 0) {
+      setSearchResults([]);
+      setHasSearched(false);
+      return;
+    }
+
+    setIsSearching(true);
+    setHasSearched(true);
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search/users?q=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.users) {
+            setSearchResults(data.users);
+          } else {
+            setSearchResults([]);
+          }
+        }
+      } catch (error) {
+        console.error('Search error:', error);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query]);
 
   const handleOpenGames = () => {
     sound.playPop(520);
-    setSelectedGame(null); // Shows game selector in modal
+    setSelectedGame(null);
     setIsGamesOpen(true);
   };
 
@@ -97,7 +131,7 @@ export default function SearchPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors pb-24 md:pb-12">
-      {/* 1. TOP STICKY SEARCH BAR (Matches Wireframe IMG_20260928_203535: "Search for Users") */}
+      {/* 1. TOP STICKY SEARCH BAR */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-md border-b border-border/80 px-4 py-3.5 shadow-xs">
         <div className="max-w-xl mx-auto">
           <div className="relative">
@@ -125,9 +159,7 @@ export default function SearchPage() {
       </div>
 
       <main className="max-w-xl mx-auto px-4 py-6 space-y-6">
-        {/* ============================================================ */}
         {/* CASE A: LIVE SEARCH RESULTS (When query is not empty) */}
-        {/* ============================================================ */}
         {query.trim().length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
@@ -136,12 +168,21 @@ export default function SearchPage() {
           >
             <div className="flex items-center justify-between text-xs text-muted-foreground font-semibold px-1">
               <span>Results for &ldquo;{query}&rdquo;</span>
-              <span>{filteredUsers.length} found</span>
+              {isSearching ? (
+                <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" />Searching...</span>
+              ) : (
+                <span>{searchResults.length} found</span>
+              )}
             </div>
 
-            {filteredUsers.length > 0 ? (
+            {isSearching ? (
+              <div className="p-8 text-center bg-card rounded-2xl border border-dashed border-border/70 text-muted-foreground">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                <p className="text-sm font-semibold">Searching creators...</p>
+              </div>
+            ) : searchResults.length > 0 ? (
               <div className="space-y-2.5">
-                {filteredUsers.map((user, i) => (
+                {searchResults.map((user, i) => (
                   <motion.div
                     key={user.id}
                     initial={{ opacity: 0, y: 6 }}
@@ -204,11 +245,7 @@ export default function SearchPage() {
           </motion.div>
         )}
 
-        {/* ============================================================ */}
         {/* CASE B: WIREFRAME-EXACT 2-COLUMN ACTIVITIES GRID */}
-        {/* Matches notebook drawing IMG_20260928_203535.jpg: */}
-        {/* Section title "Activities" + 2 columns of 3 rounded cards */}
-        {/* ============================================================ */}
         {query.trim().length === 0 && (
           <div className="space-y-5">
             {/* Header */}
@@ -227,7 +264,7 @@ export default function SearchPage() {
               </span>
             </div>
 
-            {/* 2-Column Grid (Direct match with user wireframe: [GAMES] [Quotes] [Questions] etc.) */}
+            {/* 2-Column Grid */}
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
               {/* CARD 1: GAMES */}
               <motion.div
@@ -410,11 +447,7 @@ export default function SearchPage() {
         )}
       </main>
 
-      {/* ============================================================ */}
-      {/* FULL ACTIVITY MODALS (Clean, focused interactive spaces) */}
-      {/* ============================================================ */}
-
-      {/* 1. Games Arena Modal (Chess, Ludo, Tic-Tac-Toe, Trivia + Bot/Friends/Strangers) */}
+      {/* FULL ACTIVITY MODALS */}
       <GameLobbyModal
         game={selectedGame}
         isOpen={isGamesOpen}
@@ -424,31 +457,26 @@ export default function SearchPage() {
         }}
       />
 
-      {/* 2. Quotes & Stories Modal */}
       <QuotesModal
         isOpen={isQuotesOpen}
         onClose={() => setIsQuotesOpen(false)}
       />
 
-      {/* 3. Daily Question Chamber Modal */}
       <QuestionModal
         isOpen={isQuestionsOpen}
         onClose={() => setIsQuestionsOpen(false)}
       />
 
-      {/* 4. Truth or Dare & Bottle Spin Modal */}
       <TruthOrDareModal
         isOpen={isTruthOrDareOpen}
         onClose={() => setIsTruthOrDareOpen(false)}
       />
 
-      {/* 5. Live Dilemmas & Would You Rather Modal */}
       <DilemmaModal
         isOpen={isDilemmasOpen}
         onClose={() => setIsDilemmasOpen(false)}
       />
 
-      {/* 6. Real-time Vibe Lounges Modal */}
       <VibeLoungesModal
         isOpen={isVibesOpen}
         onClose={() => setIsVibesOpen(false)}

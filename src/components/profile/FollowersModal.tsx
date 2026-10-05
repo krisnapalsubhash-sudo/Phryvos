@@ -1,50 +1,70 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Search, UserPlus, Check, Sparkles } from 'lucide-react';
-import { MOCK_USERS } from '@/lib/mock/users';
+import { X, Search, UserPlus, Check, Loader2 } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { sound } from '@/lib/sound';
 import Link from 'next/link';
+import type { User } from '@/types';
 
 interface FollowersModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialTab?: 'followers' | 'following';
   userName?: string;
+  profileUserId?: string;
 }
 
-export function FollowersModal({ isOpen, onClose, initialTab = 'followers', userName = 'User' }: FollowersModalProps) {
+interface ModalUser extends User {
+  isFollowing?: boolean;
+}
+
+export function FollowersModal({ isOpen, onClose, initialTab = 'followers', userName = 'User', profileUserId }: FollowersModalProps) {
   const [activeTab, setActiveTab] = useState<'followers' | 'following'>(initialTab);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [followingMap, setFollowingMap] = useState<Record<string, boolean>>({
-    '1': true,
-    '3': true,
-  });
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [users, setUsers] = useState<ModalUser[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const followersList = MOCK_USERS.slice(0, 6);
-  const followingList = MOCK_USERS.slice(2, 7);
+  useEffect(() => {
+    if (!isOpen || !profileUserId) return;
 
-  const currentList = activeTab === 'followers' ? followersList : followingList;
+    const fetchList = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const endpoint = activeTab === 'followers'
+          ? `/api/users/${profileUserId}/followers`
+          : `/api/users/${profileUserId}/following`;
+        const res = await fetch(endpoint);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.users) {
+            setUsers(data.users);
+          } else {
+            setUsers([]);
+          }
+        } else {
+          setError('Failed to load');
+        }
+      } catch {
+        setError('Network error');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const filteredList = currentList.filter(
+    fetchList();
+  }, [isOpen, profileUserId, activeTab]);
+
+  const filteredList = users.filter(
     (u) =>
       u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.username.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const toggleFollow = (userId: string) => {
-    const isNowFollowing = !followingMap[userId];
-    setFollowingMap((prev) => ({ ...prev, [userId]: isNowFollowing }));
-    if (isNowFollowing) {
-      sound.playHeart();
-    } else {
-      sound.playPop(340);
-    }
-  };
 
   if (!isOpen) return null;
 
@@ -59,10 +79,11 @@ export function FollowersModal({ isOpen, onClose, initialTab = 'followers', user
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-border/60 shrink-0">
-            <h3 className="text-sm font-bold text-foreground truncate">@{userName}'s Network</h3>
+            <h3 className="text-sm font-bold text-foreground truncate">@{userName}&apos;s Network</h3>
             <button
               onClick={onClose}
               className="w-8 h-8 rounded-full hover:bg-secondary flex items-center justify-center text-muted-foreground transition-colors"
+              aria-label="Close"
             >
               <X className="w-4 h-4" />
             </button>
@@ -79,7 +100,7 @@ export function FollowersModal({ isOpen, onClose, initialTab = 'followers', user
                 activeTab === 'followers' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground'
               }`}
             >
-              Followers ({followersList.length})
+              Followers ({users.length})
             </button>
 
             <button
@@ -91,7 +112,7 @@ export function FollowersModal({ isOpen, onClose, initialTab = 'followers', user
                 activeTab === 'following' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground'
               }`}
             >
-              Following ({followingList.length})
+              Following ({users.length})
             </button>
           </div>
 
@@ -109,9 +130,18 @@ export function FollowersModal({ isOpen, onClose, initialTab = 'followers', user
 
           {/* User List */}
           <div className="space-y-2.5 overflow-y-auto flex-1 pr-1">
-            {filteredList.map((user) => {
-              const isFollowing = !!followingMap[user.id];
-              return (
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : error ? (
+              <div className="text-center py-8 text-xs text-destructive">{error}</div>
+            ) : filteredList.length === 0 ? (
+              <div className="text-center py-8 text-xs text-muted-foreground">
+                {searchQuery ? `No users found matching "${searchQuery}"` : 'No one yet'}
+              </div>
+            ) : (
+              filteredList.map((user) => (
                 <div
                   key={user.id}
                   className="flex items-center justify-between p-2 rounded-2xl hover:bg-secondary/30 transition-colors"
@@ -131,16 +161,15 @@ export function FollowersModal({ isOpen, onClose, initialTab = 'followers', user
                   </Link>
 
                   <Button
-                    onClick={() => toggleFollow(user.id)}
                     size="sm"
-                    variant={isFollowing ? 'secondary' : 'primary'}
+                    variant={user.isFollowing ? 'secondary' : 'primary'}
                     className={`rounded-full h-7 text-xs px-3 gap-1 shrink-0 ${
-                      isFollowing
+                      user.isFollowing
                         ? 'border border-border/70 text-foreground'
                         : 'bg-primary text-white hover:bg-primary/90'
                     }`}
                   >
-                    {isFollowing ? (
+                    {user.isFollowing ? (
                       <>
                         <Check className="w-3 h-3 text-emerald-500" />
                         <span>Following</span>
@@ -153,13 +182,7 @@ export function FollowersModal({ isOpen, onClose, initialTab = 'followers', user
                     )}
                   </Button>
                 </div>
-              );
-            })}
-
-            {filteredList.length === 0 && (
-              <div className="text-center py-8 text-xs text-muted-foreground">
-                No users found matching "{searchQuery}"
-              </div>
+              ))
             )}
           </div>
         </motion.div>

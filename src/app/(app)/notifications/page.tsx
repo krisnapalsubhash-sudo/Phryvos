@@ -1,37 +1,100 @@
 'use client';
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Heart, MessageCircle, Trophy, UserPlus, Zap, Bell, CheckCheck } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Heart, MessageCircle, Trophy, UserPlus, Zap, Bell, CheckCheck, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Avatar } from '@/components/ui/avatar';
 
 interface NotificationItem {
-  id: number;
+  id: string;
   type: string;
-  icon: any;
-  from?: string;
-  text: string;
-  time: string;
-  unread: boolean;
+  actor: {
+    id: string;
+    username: string;
+    displayName: string;
+    avatar: string;
+  };
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
 }
 
-const initialNotifications: NotificationItem[] = [
-  { id: 1, type: 'message', icon: MessageCircle, from: 'Arjun Mehta', text: 'sent you a direct message', time: '2m ago', unread: true },
-  { id: 2, type: 'connection', icon: UserPlus, from: 'Sarah Connor', text: 'started following you', time: '1h ago', unread: true },
-  { id: 3, type: 'like', icon: Heart, from: 'Kenji Sato', text: 'liked your latest design post', time: '3h ago', unread: true },
-  { id: 4, type: 'mention', icon: Bell, from: 'Maya Chen', text: 'mentioned you in a radar thread', time: '5h ago', unread: false },
-  { id: 5, type: 'achievement', icon: Trophy, text: 'You unlocked the "Cosmic Navigator" badge! 🌟', time: '1d ago', unread: false },
-  { id: 6, type: 'system', icon: Zap, text: 'Welcome to Phryvos! Your adaptive profile is all set.', time: '2d ago', unread: false },
-];
+const ICON_MAP: Record<string, typeof Heart> = {
+  LIKE: Heart,
+  COMMENT: MessageCircle,
+  FOLLOW: UserPlus,
+  MENTION: Bell,
+  ACHIEVEMENT: Trophy,
+  SYSTEM: Zap,
+  MESSAGE: MessageCircle,
+  MESSAGE_REQUEST: MessageCircle,
+};
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d`;
+  return `${Math.floor(days / 7)}w`;
+}
 
 export default function NotificationsPage() {
-  const [notifs, setNotifs] = useState(initialNotifications);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const markAllRead = () => {
-    setNotifs((prev) => prev.map((n) => ({ ...n, unread: false })));
+  useEffect(() => {
+    const fetchNotifications = async () => {
+      try {
+        const res = await fetch('/api/notifications');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.notifications) {
+            setNotifications(data.notifications);
+          }
+        } else {
+          setError('Failed to load notifications');
+        }
+      } catch (err) {
+        console.error('Notifications fetch error:', err);
+        setError('Failed to load notifications');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotifications();
+  }, []);
+
+  const markAllRead = async () => {
+    try {
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        body: JSON.stringify({ readAll: true }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    } catch (err) {
+      console.error('Mark all read error:', err);
+    }
   };
 
-  const unreadCount = notifs.filter((n) => n.unread).length;
+  const markRead = async (id: string) => {
+    try {
+      await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+    } catch (err) {
+      console.error('Mark read error:', err);
+    }
+  };
+
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors pb-24 md:pb-12">
@@ -59,40 +122,52 @@ export default function NotificationsPage() {
       </div>
 
       <main className="max-w-2xl mx-auto px-4 py-4 space-y-2">
-        {notifs.map((notif, i) => {
-          const Icon = notif.icon;
-          return (
-            <motion.div
-              key={notif.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
-              className={`bg-card border rounded-2xl p-4 flex items-center gap-3.5 transition-all shadow-xs hover:border-border ${
-                notif.unread ? 'border-primary/40 bg-primary/5' : 'border-border/70'
-              }`}
-            >
-              <div
-                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                  notif.unread
-                    ? 'bg-primary/10 text-primary'
-                    : 'bg-secondary text-muted-foreground'
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center bg-card rounded-2xl border border-destructive/30 text-destructive">
+            <p className="text-sm font-semibold">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => window.location.reload()} className="mt-3">
+              Retry
+            </Button>
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="p-8 text-center bg-card rounded-2xl border border-dashed border-border/70 text-muted-foreground">
+            <p className="text-sm font-semibold">No notifications yet</p>
+            <p className="text-xs mt-1">When someone interacts with you, you&apos;ll see it here.</p>
+          </div>
+        ) : (
+          notifications.map((notif, i) => {
+            const Icon = ICON_MAP[notif.type.toUpperCase()] || Bell;
+            return (
+              <motion.div
+                key={notif.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.04 }}
+                onClick={() => markRead(notif.id)}
+                className={`bg-card border rounded-2xl p-4 flex items-center gap-3.5 transition-all shadow-xs hover:border-border cursor-pointer ${
+                  !notif.isRead ? 'border-primary/40 bg-primary/5' : 'border-border/70'
                 }`}
               >
-                <Icon className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm text-foreground">
-                  {notif.from && <span className="font-semibold text-foreground mr-1">{notif.from}</span>}
-                  <span className="text-muted-foreground">{notif.text}</span>
-                </p>
-                <p className="text-[11px] text-muted-foreground/80 mt-0.5">{notif.time}</p>
-              </div>
-              {notif.unread && (
-                <span className="w-2 h-2 rounded-full bg-primary shrink-0 ring-4 ring-primary/20" />
-              )}
-            </motion.div>
-          );
-        })}
+                <Avatar size="sm" fallback={notif.actor.avatar} className="shrink-0" />
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-primary/10 text-primary">
+                  <Icon className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm text-foreground">
+                    {!notif.isRead && <span className="w-2 h-2 rounded-full bg-primary shrink-0 mr-2 inline-block" />}
+                    <span className="font-semibold text-foreground mr-1">{notif.actor.displayName}</span>
+                    <span className="text-muted-foreground">{notif.body}</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/80 mt-0.5">{timeAgo(notif.createdAt)}</p>
+                </div>
+              </motion.div>
+            );
+          })
+        )}
       </main>
     </div>
   );

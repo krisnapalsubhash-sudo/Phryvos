@@ -27,7 +27,6 @@ import {
 import { usePostsStore } from '@/store/posts';
 import { useAuthStore } from '@/store/auth';
 import { useFeaturesStore } from '@/store/features';
-import { CURRENT_USER } from '@/lib/mock';
 import type { Post } from '@/types';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -59,7 +58,7 @@ interface PostCardProps {
 export function PostCard({ post }: PostCardProps) {
   const { toggleLike } = usePostsStore();
   const { user: authUser } = useAuthStore();
-  const currentUser = authUser || CURRENT_USER;
+  const currentUser = authUser;
   const { flags } = useFeaturesStore();
   const isMinimalist = flags.minimalistMode;
 
@@ -617,9 +616,9 @@ export function PostCard({ post }: PostCardProps) {
           >
             {commentsList.map((c, i) => (
               <div key={i} className="flex items-start gap-2.5 text-xs">
-                <Avatar size="xs" fallback={currentUser.avatar || '😊'} />
+                <Avatar size="xs" fallback={currentUser?.avatar || '😊'} />
                 <div className="bg-card border border-border/70 rounded-xl px-3.5 py-2 flex-1 shadow-xs">
-                  <span className="font-semibold text-foreground mr-1.5">{currentUser.displayName || 'You'}</span>
+                  <span className="font-semibold text-foreground mr-1.5">{currentUser?.displayName || 'You'}</span>
                   <span className="text-muted-foreground">{c}</span>
                 </div>
               </div>

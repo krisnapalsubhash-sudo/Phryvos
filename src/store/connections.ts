@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import type { Connection, User } from '@/types';
-import { MOCK_USERS } from '@/lib/mock/users';
 import { getSessionEpoch, isStaleRequest } from '@/lib/auth/session-epoch';
 
 const createServerSafeStorage = (): StateStorage => ({
@@ -19,37 +18,13 @@ const createServerSafeStorage = (): StateStorage => ({
   },
 });
 
-// Seed initial connections from mock users so the user has familiar connections
-const INITIAL_CONNECTIONS: Connection[] = [
-  {
-    id: 'conn-1',
-    user: MOCK_USERS[0],
-    connectedAt: new Date(Date.now() - 86400000 * 3).toISOString(),
-    lastMessage: 'Want to play some Valorant later?',
-    lastMessageAt: new Date(Date.now() - 1000 * 60 * 3).toISOString(),
-  },
-  {
-    id: 'conn-2',
-    user: MOCK_USERS[3],
-    connectedAt: new Date(Date.now() - 86400000 * 5).toISOString(),
-    lastMessage: 'Thanks for the feedback on my artwork!',
-    lastMessageAt: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-  },
-  {
-    id: 'conn-3',
-    user: MOCK_USERS[5],
-    connectedAt: new Date(Date.now() - 86400000 * 7).toISOString(),
-    lastMessage: 'Yes! The transformers architecture is fascinating',
-    lastMessageAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-  },
-];
-
 interface ConnectionsState {
   ownerUserId: string | null;
   connections: Connection[];
   pendingRequests: User[];
   loading: boolean;
   error: string | null;
+  initialized: boolean;
 
   // Local mutations
   setOwnerUserId: (userId: string | null) => void;
@@ -90,20 +65,22 @@ export const useConnectionsStore = create<ConnectionsState>()(
   persist(
     (set, get) => ({
       ownerUserId: null,
-      connections: INITIAL_CONNECTIONS,
+      connections: [],
       pendingRequests: [],
       loading: false,
       error: null,
+      initialized: false,
 
       setOwnerUserId: (userId) => set({ ownerUserId: userId }),
 
       reset: () =>
         set({
           ownerUserId: null,
-          connections: INITIAL_CONNECTIONS,
+          connections: [],
           pendingRequests: [],
           loading: false,
           error: null,
+          initialized: false,
         }),
 
       addConnection: (userMeta) => {
@@ -172,7 +149,7 @@ export const useConnectionsStore = create<ConnectionsState>()(
           if (isStaleRequest(epoch)) return;
 
           if (data.success && data.connections) {
-            set({ connections: data.connections, loading: false });
+            set({ connections: data.connections, loading: false, initialized: true });
           } else {
             set({ loading: false, error: 'Failed to fetch connections' });
           }

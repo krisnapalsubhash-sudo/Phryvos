@@ -5,7 +5,6 @@ import { motion } from 'framer-motion';
 import { Plus, Mic, Moon, Sparkles } from 'lucide-react';
 import { useStoriesStore } from '@/store/stories';
 import { useAuthStore } from '@/store/auth';
-import { CURRENT_USER } from '@/lib/mock';
 import type { Story } from '@/types';
 import { Avatar } from '@/components/ui/avatar';
 import { sound } from '@/lib/sound';
@@ -14,7 +13,7 @@ import { CreateStoryModal } from './CreateStoryModal';
 export function StoriesBar() {
   const { stories, openStory } = useStoriesStore();
   const { user } = useAuthStore();
-  const currentUser = user || CURRENT_USER;
+  const currentUser = user;
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
@@ -46,7 +45,7 @@ export function StoriesBar() {
           aria-label="Add to your story"
         >
           <div className="relative w-15 h-15 rounded-full p-0.5 border-2 border-dashed border-primary/50 group-hover:border-primary transition-colors flex items-center justify-center bg-card">
-            <Avatar size="lg" fallback={currentUser.avatar} />
+            <Avatar size="lg" fallback={currentUser?.avatar || '😊'} />
             <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center shadow-md ring-2 ring-background group-hover:scale-110 transition-transform">
               <Plus className="w-3.5 h-3.5" />
             </div>

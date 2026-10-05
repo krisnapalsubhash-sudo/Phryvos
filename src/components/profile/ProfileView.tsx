@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Grid,
@@ -29,8 +29,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { usePostsStore } from '@/store/posts';
 import { useAuthStore } from '@/store/auth';
-import { CURRENT_USER } from '@/lib/mock';
-import { getUserById } from '@/lib/mock/users';
 import type { User, Post } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Avatar } from '@/components/ui/avatar';
@@ -122,13 +120,54 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
   const { user: authUser } = useAuthStore();
   const posts = usePostsStore((state) => state.posts);
 
-  const isOwnProfile = userId === 'me' || userId === authUser?.id || userId === CURRENT_USER.id;
-  const targetUser: User = isOwnProfile ? (authUser || CURRENT_USER) : (getUserById(userId) || CURRENT_USER);
+  const isOwnProfile = userId === 'me' || userId === authUser?.id;
+  const initialUser: User | null = isOwnProfile ? (authUser || null) : null;
+
+  // If not own profile and no auth user, we need to fetch the profile via API
+  const [fetchedUser, setFetchedUser] = useState<User | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+
+  useEffect(() => {
+    if (!isOwnProfile && userId && userId !== 'me') {
+      const fetchProfile = async () => {
+        setIsLoadingProfile(true);
+        try {
+          const res = await fetch(`/api/users/${userId}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.user) {
+              setFetchedUser(data.user);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch profile:', error);
+        } finally {
+          setIsLoadingProfile(false);
+        }
+      };
+      fetchProfile();
+    }
+  }, [userId, isOwnProfile]);
+
+  const resolvedUser: User = initialUser || fetchedUser || {
+    id: '',
+    username: '',
+    displayName: 'Unknown User',
+    bio: '',
+    avatar: '❓',
+    interests: [],
+    followers: 0,
+    following: 0,
+    postsCount: 0,
+    isConnected: false,
+    isOnline: false,
+    createdAt: new Date().toISOString(),
+  };
 
   // States
   const [activeTab, setActiveTab] = useState<'posts' | 'grid' | 'audio' | 'saved'>('posts');
-  const [isFollowing, setIsFollowing] = useState(targetUser.isConnected || false);
-  const [followersCount, setFollowersCount] = useState(targetUser.followers || 428);
+  const [isFollowing, setIsFollowing] = useState(resolvedUser.isConnected || false);
+  const [followersCount, setFollowersCount] = useState(resolvedUser.followers || 428);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -139,8 +178,8 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
   // Filter posts for this user
   const userPosts = posts.filter(
     (p) =>
-      p.author.id === targetUser.id ||
-      (isOwnProfile && (p.author.id === 'me' || p.author.username === targetUser.username))
+      p.author.id === resolvedUser.id ||
+      (isOwnProfile && (p.author.id === 'me' || p.author.username === resolvedUser.username))
   );
 
   const userMediaPosts = userPosts.filter((p) => !!p.image);
@@ -153,10 +192,10 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
     setFollowersCount((prev) => (next ? prev + 1 : prev - 1));
     if (next) {
       sound.playHeart();
-      toast.success(`You are now following @${targetUser.username}! ✨`);
+      toast.success(`You are now following @${resolvedUser.username}! ✨`);
     } else {
       sound.playPop(320);
-      toast.info(`Unfollowed @${targetUser.username}`);
+      toast.info(`Unfollowed @${resolvedUser.username}`);
     }
   };
 
@@ -176,7 +215,7 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
       {/* 1. Cover Banner */}
       <div
         className={`h-40 sm:h-52 w-full bg-gradient-to-r ${
-          targetUser.cover || 'from-indigo-600 via-purple-600 to-cyan-500'
+          resolvedUser.cover || 'from-indigo-600 via-purple-600 to-cyan-500'
         } relative border-b border-border/60 overflow-hidden shadow-inner`}
       >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.15)_1px,transparent_0)] [background-size:20px_20px] pointer-events-none" />
@@ -214,9 +253,9 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
             <div className="relative inline-block">
               {/* Avatar with Glow Ring */}
               <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl phryvos-gradient flex items-center justify-center text-4xl shadow-xl ring-4 ring-card text-white overflow-hidden">
-                {targetUser.avatar || '😊'}
+                {resolvedUser.avatar || '😊'}
               </div>
-              {targetUser.isOnline && (
+              {resolvedUser.isOnline && (
                 <span
                   className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 ring-4 ring-card"
                   title="Online now"
@@ -319,7 +358,7 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
                           </button>
                           <button
                             onClick={() => {
-                              toast.info(`Reported @${targetUser.username} to moderation`);
+                              toast.info(`Reported @${resolvedUser.username} to moderation`);
                               setShowOptionsDropdown(false);
                             }}
                             className="w-full text-left px-3 py-1.5 text-xs text-rose-500 hover:bg-rose-500/10 rounded-xl flex items-center gap-2"
@@ -340,28 +379,28 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
           <div>
             <div className="flex items-center gap-1.5">
               <h1 className="text-xl sm:text-2xl font-extrabold text-foreground tracking-tight">
-                {targetUser.displayName}
+                {resolvedUser.displayName}
               </h1>
               <CheckCircle2 className="w-4 h-4 text-primary fill-primary/10 shrink-0" />
             </div>
-            <p className="text-xs text-muted-foreground font-medium mt-0.5">@{targetUser.username}</p>
+            <p className="text-xs text-muted-foreground font-medium mt-0.5">@{resolvedUser.username}</p>
 
             {/* Bio with line breaks */}
             <p className="text-xs sm:text-sm text-foreground/90 mt-2.5 leading-relaxed whitespace-pre-line">
-              {targetUser.bio || 'Exploring the world one stranger conversation at a time ✨'}
+              {resolvedUser.bio || 'Exploring the world one stranger conversation at a time ✨'}
             </p>
 
             {/* Metadata Badges */}
             <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground mt-3">
-              {targetUser.location && (
+              {resolvedUser.location && (
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span>{targetUser.location}</span>
+                  <span>{resolvedUser.location}</span>
                 </span>
               )}
               <span className="flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                <span>Joined {new Date(targetUser.createdAt || '2025-01-01').getFullYear()}</span>
+                <span>Joined {new Date(resolvedUser.createdAt || '2025-01-01').getFullYear()}</span>
               </span>
               <a
                 href="https://phryvos.in"
@@ -370,14 +409,14 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
                 className="flex items-center gap-1 text-primary hover:underline"
               >
                 <LinkIcon className="w-3 h-3" />
-                <span>phryvos.in/{targetUser.username}</span>
+                <span>phryvos.in/{resolvedUser.username}</span>
               </a>
             </div>
 
             {/* Interest Tags */}
-            {targetUser.interests && targetUser.interests.length > 0 && (
+            {resolvedUser.interests && resolvedUser.interests.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-3.5">
-                {targetUser.interests.map((tag) => (
+                {resolvedUser.interests.map((tag) => (
                   <span
                     key={tag}
                     className="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-primary/10 text-primary border border-primary/20"
@@ -392,7 +431,7 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
             <div className="flex items-center gap-6 border-t border-border/60 mt-4 pt-3.5">
               <div>
                 <span className="font-extrabold text-sm sm:text-base text-foreground">
-                  {formatNumber(userPosts.length || targetUser.postsCount || 12)}
+                  {formatNumber(userPosts.length || resolvedUser.postsCount || 12)}
                 </span>
                 <span className="text-xs text-muted-foreground ml-1.5">Posts</span>
               </div>
@@ -412,7 +451,7 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
                 className="hover:opacity-80 transition-opacity text-left"
               >
                 <span className="font-extrabold text-sm sm:text-base text-foreground">
-                  {formatNumber(targetUser.following || 280)}
+                  {formatNumber(resolvedUser.following || 280)}
                 </span>
                 <span className="text-xs text-muted-foreground ml-1.5 hover:underline">Following</span>
               </button>
@@ -611,12 +650,13 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
         isOpen={isFollowersModalOpen}
         onClose={() => setIsFollowersModalOpen(false)}
         initialTab={followersModalInitialTab}
-        userName={targetUser.username}
+        userName={resolvedUser.username}
+        profileUserId={resolvedUser.id}
       />
       <ShareProfileModal
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
-        user={targetUser}
+        user={resolvedUser}
       />
       <HighlightsViewerModal highlight={activeHighlight} onClose={() => setActiveHighlight(null)} />
     </div>

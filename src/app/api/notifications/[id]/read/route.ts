@@ -16,16 +16,16 @@ export async function POST(
 
     const { id } = await params;
 
-    const notification = await prisma.notification.findUnique({
-      where: { id },
+    // Verify notification belongs to current user
+    const notif = await prisma.notification.findFirst({
+      where: {
+        id,
+        userId: session.user.id,
+      },
     });
 
-    if (!notification) {
-      return NextResponse.json({ error: 'Notification not found' }, { status: 404 });
-    }
-
-    if (notification.userId !== session.user.id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!notif) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
     await prisma.notification.update({
@@ -37,7 +37,7 @@ export async function POST(
   } catch (error) {
     console.error('Mark notification read error:', error);
     return NextResponse.json(
-      { error: 'Failed to mark notification as read' },
+      { error: 'Failed to mark notification read' },
       { status: 500 }
     );
   }

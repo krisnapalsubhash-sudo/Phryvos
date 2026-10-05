@@ -1,10 +1,9 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { UserPlus, MapPin, TrendingUp, Sparkles, Compass } from 'lucide-react';
 import { useAuthStore } from '@/store/auth';
-import { MOCK_USERS } from '@/lib/mock';
-import { CURRENT_USER } from '@/lib/mock';
 import type { User } from '@/types';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -17,7 +16,11 @@ const TRENDING_TAGS = [
   { tag: 'indieHackers', posts: '22.1k' },
 ];
 
-function ActiveNowItem({ user }: { user: User }) {
+interface RailUser extends User {
+  isFollowing?: boolean;
+}
+
+function ActiveNowItem({ user }: { user: RailUser }) {
   return (
     <motion.div
       initial={{ opacity: 0, x: 10 }}
@@ -39,7 +42,7 @@ function ActiveNowItem({ user }: { user: User }) {
           {user.location || 'Exploring'}
         </p>
       </div>
-      <Link href={`/chat`}>
+      <Link href="/chat">
         <Button
           variant="outline"
           size="xs"
@@ -52,7 +55,7 @@ function ActiveNowItem({ user }: { user: User }) {
   );
 }
 
-function SuggestedUser({ user }: { user: User }) {
+function SuggestedUser({ user }: { user: RailUser }) {
   return (
     <div className="flex items-center justify-between py-2 px-2.5 rounded-xl hover:bg-secondary/40 transition-colors">
       <div className="flex items-center gap-2.5 min-w-0">
@@ -81,10 +84,46 @@ function SuggestedUser({ user }: { user: User }) {
 
 export function RightRail() {
   const { user } = useAuthStore();
-  const currentUser = user || CURRENT_USER;
+  const currentUser = user;
+  const [onlineUsers, setOnlineUsers] = useState<RailUser[]>([]);
+  const [suggestedUsers, setSuggestedUsers] = useState<RailUser[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const onlineUsers = MOCK_USERS.filter((u) => u.id !== currentUser.id && u.isOnline).slice(0, 4);
-  const suggestedUsers = MOCK_USERS.filter((u) => u.id !== currentUser.id).slice(0, 3);
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const fetchSuggestions = async () => {
+      setLoading(true);
+      try {
+        const [onlineRes, suggestRes] = await Promise.all([
+          fetch('/api/search/users?isOnline=true&limit=4'),
+          fetch('/api/search/users?limit=3'),
+        ]);
+
+        if (onlineRes.ok) {
+          const onlineData = await onlineRes.json();
+          if (onlineData.success && onlineData.users) {
+            const filtered = onlineData.users.filter((u: RailUser) => u.id !== currentUser.id);
+            setOnlineUsers(filtered.slice(0, 4));
+          }
+        }
+
+        if (suggestRes.ok) {
+          const suggestData = await suggestRes.json();
+          if (suggestData.success && suggestData.users) {
+            const filtered = suggestData.users.filter((u: RailUser) => u.id !== currentUser.id);
+            setSuggestedUsers(filtered.slice(0, 3));
+          }
+        }
+      } catch (error) {
+        console.error('RightRail fetch error:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSuggestions();
+  }, [currentUser?.id]);
 
   return (
     <aside className="w-80 px-4 py-6 overflow-y-auto hidden xl:block border-l border-border/60 transition-colors">
@@ -124,9 +163,15 @@ export function RightRail() {
           </div>
 
           <div className="space-y-0.5">
-            {onlineUsers.map((u) => (
-              <ActiveNowItem key={u.id} user={u} />
-            ))}
+            {loading ? (
+              <div className="py-4 text-center text-xs text-muted-foreground">Loading...</div>
+            ) : onlineUsers.length > 0 ? (
+              onlineUsers.map((u) => (
+                <ActiveNowItem key={u.id} user={u} />
+              ))
+            ) : (
+              <div className="py-4 text-center text-xs text-muted-foreground">No active creators online</div>
+            )}
           </div>
         </div>
 
@@ -140,9 +185,15 @@ export function RightRail() {
           </div>
 
           <div className="space-y-0.5">
-            {suggestedUsers.map((u) => (
-              <SuggestedUser key={u.id} user={u} />
-            ))}
+            {loading ? (
+              <div className="py-4 text-center text-xs text-muted-foreground">Loading...</div>
+            ) : suggestedUsers.length > 0 ? (
+              suggestedUsers.map((u) => (
+                <SuggestedUser key={u.id} user={u} />
+              ))
+            ) : (
+              <div className="py-4 text-center text-xs text-muted-foreground">No suggestions yet</div>
+            )}
           </div>
         </div>
 

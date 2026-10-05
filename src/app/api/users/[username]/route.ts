@@ -28,6 +28,54 @@ export async function GET(
   try {
     const session = await auth();
     const { username } = await params;
+    const { searchParams } = new URL(request.url);
+    const listType = searchParams.get('list'); // 'followers' | 'following'
+
+    // If listing followers/following, return array of users
+    if (listType === 'followers' || listType === 'following') {
+      const where: any = {};
+      if (listType === 'followers') {
+        where.connectedBy = { some: { username } };
+      } else {
+        where.connections = { some: { username } };
+      }
+
+      const connectedUsers = await prisma.user.findMany({
+        where,
+        select: USER_PUBLIC_FIELDS,
+        take: 50,
+      });
+
+      // Add isFollowing if session exists
+      let usersWithConnection = connectedUsers;
+      if (session?.user?.id) {
+        const connectionIds = await prisma.connection.findMany({
+          where: { userId: session.user.id },
+          select: { connectedUserId: true },
+        });
+        const connectedIds = new Set(connectionIds.map((c) => c.connectedUserId));
+        // Also include if the target user follows session user
+        const backConnections = await prisma.connection.findMany({
+          where: { userId: username.toLowerCase() },
+          select: { connectedUserId: true },
+        });
+        const backIds = new Set(backConnections.map((c) => c.connectedUserId));
+
+        usersWithConnection = connectedUsers.map((u) => ({
+          ...u,
+          isFollowing: connectedIds.has(u.id) || backIds.has(u.id),
+        }));
+      }
+
+      return NextResponse.json({
+        success: true,
+        users: usersWithConnection.map((u) => ({
+          ...u,
+          createdAt: u.createdAt.toISOString(),
+          lastSeen: u.lastSeen?.toISOString() || null,
+        })),
+      });
+    }
 
     const user = await prisma.user.findUnique({
       where: { username: username.toLowerCase() },
