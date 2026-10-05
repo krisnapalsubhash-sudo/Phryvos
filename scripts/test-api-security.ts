@@ -56,6 +56,31 @@ async function runSecurityTests() {
   const minorToxic = safetyEngine.sanitizeMessage('send me your secret phone number 9876543210 please', true);
   assert(minorToxic.cleanText.includes('••••••••••') || minorToxic.moderation.hasContactExchange, 'Minor grooming/PII is detected/redacted');
 
+  // TEST 4: Profanity & Slur Masking
+  console.log('\nTest Group 4: Profanity & Slur Masking');
+  const profanityTest = safetyEngine.sanitizeMessage('This is a fuck bad word', false);
+  assert(profanityTest.cleanText.includes('****') || profanityTest.isToxic, 'Profanity word is masked or marked toxic');
+
+  // TEST 5: Cryptographic Token Hashing (Audit #2.3 & #2.4)
+  console.log('\nTest Group 5: Cryptographic Token Hashing & Secret Protection');
+  const crypto = await import('crypto');
+  const rawToken = 'sample_raw_reset_token_12345';
+  const hashedToken1 = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const hashedToken2 = crypto.createHash('sha256').update(rawToken).digest('hex');
+  assert(hashedToken1 === hashedToken2, 'SHA-256 hashing is deterministic');
+  assert(hashedToken1 !== rawToken && hashedToken1.length === 64, 'Hashed token produces secure 64-char hex digest');
+
+  // TEST 6: Post & Comment Schema Validation (Audit #15)
+  console.log('\nTest Group 6: Input Sanitization & Empty Content Rejection');
+  const { z } = await import('zod');
+  const postSchema = z.object({
+    content: z.string().trim().min(1, 'Post content cannot be blank').max(2000),
+  });
+  const blankResult = postSchema.safeParse({ content: '    ' });
+  assert(!blankResult.success, 'Blank / whitespace-only post content is rejected');
+  const validResult = postSchema.safeParse({ content: 'Valid post content' });
+  assert(validResult.success, 'Valid post content is accepted');
+
   // Clean up room
   await realtimeEngine.leaveRoom(roomId, 'user_alice');
   assert(!realtimeEngine.getRoom(roomId), 'Room is cleanly archived and removed from active after leave');

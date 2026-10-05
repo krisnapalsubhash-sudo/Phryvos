@@ -55,6 +55,7 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
+    "@rollup/rollup-android-arm64": "^4.64.0",
     "@testing-library/jest-dom": "^6.10.0",
     "@testing-library/react": "^16.3.3",
     "@types/jsdom": "^30.0.0",
