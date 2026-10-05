@@ -38,7 +38,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update user with onboarding data
+    // Update user with onboarding data - strictly preserve authentication state
+    // Onboarding must NEVER modify emailVerified or authentication credentials
     const user = await prisma.user.update({
       where: { id: session.user.id },
       data: {
@@ -46,15 +47,16 @@ export async function POST(request: NextRequest) {
         displayName: validation.data.displayName || validation.data.username,
         avatar: validation.data.avatar || '😊',
         interests: validation.data.interests || [],
-        emailVerified: new Date(),
+        onboardingCompleted: true,
       },
-    });
-
-    // Store survey data
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: {
-        // We'll add survey fields to schema if needed
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        avatar: true,
+        interests: true,
+        emailVerified: true,
+        onboardingCompleted: true,
       },
     });
 
@@ -66,9 +68,16 @@ export async function POST(request: NextRequest) {
         displayName: user.displayName,
         avatar: user.avatar,
         interests: user.interests,
+        onboardingCompleted: user.onboardingCompleted,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.code === 'P2002') {
+      return NextResponse.json(
+        { error: 'Username already taken', code: 'USERNAME_TAKEN' },
+        { status: 409 }
+      );
+    }
     console.error('Onboarding error:', error);
     return NextResponse.json(
       { error: 'Onboarding failed' },
