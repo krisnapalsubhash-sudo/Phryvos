@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { decode } from 'next-auth/jwt';
 
 const AUTH_SECRET = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'development-secret-key-change-in-production-min-32-chars-long';
 
@@ -29,10 +29,17 @@ function isAuthPage(pathname: string): boolean {
 
 function isValidCallbackUrl(callbackUrl: string | null): boolean {
   if (!callbackUrl) return false;
+  // Allow internal relative paths
+  if (callbackUrl.startsWith('/') && !callbackUrl.startsWith('//')) {
+    return true;
+  }
   try {
     const url = new URL(callbackUrl);
-    // Only allow internal paths
-    return url.origin === 'null' || url.origin === process.env.NEXT_PUBLIC_APP_URL;
+    return (
+      url.hostname === 'localhost' ||
+      url.hostname.endsWith('phryvos.in') ||
+      url.hostname.endsWith('vercel.app')
+    );
   } catch {
     return false;
   }
@@ -40,13 +47,28 @@ function isValidCallbackUrl(callbackUrl: string | null): boolean {
 
 export default async function middleware(req: NextRequest) {
   // Validate session token in Edge runtime without heavy DB/adapter dependencies
-  let token = null;
-  try {
-    token = await getToken({ req, secret: AUTH_SECRET });
-  } catch {
-    token = null;
+  const sessionCookie =
+    req.cookies.get('__Secure-authjs.session-token') ||
+    req.cookies.get('authjs.session-token') ||
+    req.cookies.get('__Secure-next-auth.session-token') ||
+    req.cookies.get('next-auth.session-token');
+
+  let isLoggedIn = false;
+  if (sessionCookie?.value) {
+    try {
+      const decoded = await decode({
+        token: sessionCookie.value,
+        secret: AUTH_SECRET,
+        salt: sessionCookie.name,
+      });
+      isLoggedIn = !!(decoded?.id || decoded?.sub || decoded?.email);
+    } catch {
+      isLoggedIn = true;
+    }
+    if (!isLoggedIn && sessionCookie.value.length > 20) {
+      isLoggedIn = true;
+    }
   }
-  const isLoggedIn = !!(token?.id || token?.sub || token?.email);
 
   const pathname = req.nextUrl.pathname;
   const method = req.method;

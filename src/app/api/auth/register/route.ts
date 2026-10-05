@@ -17,10 +17,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const session = await auth();
-    if (session?.user) {
-      return NextResponse.json({ error: 'Already authenticated' }, { status: 400 });
-    }
 
     const body = await request.json();
     const validation = registerSchema.safeParse(body);

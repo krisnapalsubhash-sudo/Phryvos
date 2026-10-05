@@ -93,6 +93,34 @@ function createAuthConfig() {
           const prisma = getPrismaClient();
           const identifier = (credentials.identifier as string).trim().toLowerCase();
 
+          // Auto-provision or sign in demo user
+          if (identifier === 'demo@phryvos.com' && credentials.password === 'demo123456') {
+            let demoUser = await prisma.user.findFirst({
+              where: { email: 'demo@phryvos.com' },
+            });
+            if (!demoUser) {
+              const demoHash = await bcrypt.hash('demo123456', 10);
+              demoUser = await prisma.user.create({
+                data: {
+                  username: 'demo_user',
+                  email: 'demo@phryvos.com',
+                  displayName: 'Demo User',
+                  passwordHash: demoHash,
+                  avatar: '⚡',
+                  interests: ['Tech', 'Social'],
+                  demoMode: true,
+                },
+              });
+            }
+            return {
+              id: demoUser.id,
+              email: demoUser.email,
+              name: demoUser.displayName,
+              image: demoUser.avatar,
+              demoMode: true,
+            };
+          }
+
           // Find by email OR username
           const user = await prisma.user.findFirst({
             where: {
