@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { auth } from '@/lib/auth/config';
+import { getToken } from 'next-auth/jwt';
+
+const AUTH_SECRET = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'development-secret-key-change-in-production-min-32-chars-long';
 
 const PROTECTED_PATHS = [
   '/feed',
@@ -37,9 +39,14 @@ function isValidCallbackUrl(callbackUrl: string | null): boolean {
 }
 
 export default async function middleware(req: NextRequest) {
-  // Use NextAuth's auth() to validate session server-side
-  const session = await auth();
-  const isLoggedIn = !!session?.user?.id;
+  // Validate session token in Edge runtime without heavy DB/adapter dependencies
+  let token = null;
+  try {
+    token = await getToken({ req, secret: AUTH_SECRET });
+  } catch {
+    token = null;
+  }
+  const isLoggedIn = !!(token?.id || token?.sub || token?.email);
 
   const pathname = req.nextUrl.pathname;
   const method = req.method;
