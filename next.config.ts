@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   eslint: {
-    // ignoreDuringBuilds: true,
+    ignoreDuringBuilds: false,
   },
   images: {
     // Enable Next.js image optimization pipeline with modern AVIF/WebP formats

@@ -6,13 +6,9 @@ const STATIC_CACHE = 'phryvos-static-v1';
 const API_CACHE = 'phryvos-api-v1';
 const IMAGE_CACHE = 'phryvos-images-v1';
 
-// Files to cache immediately on install
+// Files to cache immediately on install (strictly public/static only)
 const STATIC_ASSETS = [
   '/',
-  '/radar',
-  '/feed',
-  '/chat',
-  '/profile/me',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
@@ -20,23 +16,25 @@ const STATIC_ASSETS = [
   '/offline.html',
 ];
 
-// API endpoints that can be cached with stale-while-revalidate
+// Public API endpoints that can be cached with stale-while-revalidate
 const CACHEABLE_API_PATTERNS = [
-  /^\/api\/posts/,
-  /^\/api\/stories/,
-  /^\/api\/users\/[^/]+\/posts/,
-  /^\/api\/connections/,
-  /^\/api\/search\/users/,
+  /^\/api\/posts(\?|$)/,
+  /^\/api\/stories(\?|$)/,
+  /^\/api\/search\/users(\?|$)/,
 ];
 
-// API endpoints that should NEVER be cached (private data)
+// Sensitive & authenticated API endpoints that should NEVER be cached (Audit #16)
 const NEVER_CACHE_PATTERNS = [
   /^\/api\/auth/,
-  /^\/api\/me\/profile/,
+  /^\/api\/me/,
+  /^\/api\/connections/,
   /^\/api\/conversations/,
   /^\/api\/message-requests/,
   /^\/api\/notifications/,
   /^\/api\/realtime/,
+  /^\/api\/moderation/,
+  /^\/api\/admin/,
+  /^\/api\/upload/,
 ];
 
 // Check if a URL should be cached
