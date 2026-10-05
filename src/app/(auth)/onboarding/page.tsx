@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner';
 import { useAuthStore } from '@/store/auth';
 import { useFeaturesStore } from '@/store/features';
+import { validateUsername } from '@/lib/auth/validation';
 import {
   DISCOVERY_SOURCES,
   FEATURE_INTROS,
@@ -68,6 +69,13 @@ export default function OnboardingPage() {
   // Step 5: Avatar
   const [selectedAvatar, setSelectedAvatar] = useState('😊');
   const [isCompleting, setIsCompleting] = useState(false);
+
+  // Username availability tracking (mirrors register page pattern)
+  type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid' | 'error';
+  const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
+  const [usernameStatusReason, setUsernameStatusReason] = useState<string>('');
+  const usernameCheckSeqRef = React.useRef<number>(0);
+  const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const canProceedStep0 = discoverySource !== '';
   const canProceedStep1 = true;
@@ -125,8 +133,84 @@ export default function OnboardingPage() {
     });
   };
 
+  // Debounced availability check (mirrors register page pattern)
+  const checkAvailability = React.useCallback(async (value: string) => {
+    const trimmed = value.trim().toLowerCase();
+    if (!trimmed || trimmed.length < 3) {
+      setUsernameStatus('idle');
+      setUsernameStatusReason('');
+      return;
+    }
+
+    const localValidation = validateUsername(trimmed);
+    if (!localValidation.valid) {
+      setUsernameStatus('invalid');
+      setUsernameStatusReason(localValidation.error || 'Invalid username');
+      return;
+    }
+
+    const currentSeq = ++usernameCheckSeqRef.current;
+    setUsernameStatus('checking');
+    setUsernameStatusReason('');
+
+    try {
+      const res = await fetch(`/api/auth/check-username?username=${encodeURIComponent(trimmed)}`);
+      const data = await res.json();
+
+      if (currentSeq !== usernameCheckSeqRef.current) return;
+
+      if (res.ok && data.available) {
+        setUsernameStatus('available');
+        setUsernameStatusReason('Available');
+      } else if (data.error === 'USERNAME_TAKEN' || !data.available) {
+        setUsernameStatus('taken');
+        setUsernameStatusReason(data.reason || 'Username is already taken');
+      } else {
+        setUsernameStatus('error');
+        setUsernameStatusReason(data.message || 'Unable to check availability');
+      }
+    } catch {
+      if (currentSeq === usernameCheckSeqRef.current) {
+        setUsernameStatus('error');
+        setUsernameStatusReason('Network error checking availability');
+      }
+    }
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, []);
+
+  const handleUsernameChange = (raw: string) => {
+    const clean = raw.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+    setUsername(clean);
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    if (clean.length < 3) {
+      setUsernameStatus('idle');
+      setUsernameStatusReason('');
+      return;
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      checkAvailability(clean);
+    }, 350);
+  };
+
   const handleComplete = async () => {
     if (isCompleting) return;
+
+    // Final client-side validation before API call
+    const usernameValidation = validateUsername(username);
+    if (!usernameValidation.valid || !usernameValidation.normalized) {
+      toast.error(usernameValidation.error || 'Invalid username');
+      return;
+    }
+    if (usernameStatus === 'taken') {
+      toast.error('Username is already taken. Please choose another.');
+      return;
+    }
+
     setIsCompleting(true);
     sound.playMatchChord();
 
@@ -144,8 +228,8 @@ export default function OnboardingPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username,
-          displayName: username,
+          username: usernameValidation.normalized,
+          displayName: usernameValidation.normalized,
           avatar: selectedAvatar,
           interests: selectedInterests,
           discoverySource,
@@ -159,7 +243,6 @@ export default function OnboardingPage() {
         throw new Error(data.error || 'Onboarding failed');
       }
 
-      // Update local profile store
       updateProfile({
         username: data.user.username,
         displayName: data.user.displayName,
@@ -578,20 +661,33 @@ export default function OnboardingPage() {
                     <input
                       type="text"
                       value={username}
-                      onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase())}
+                      onChange={(e) => handleUsernameChange(e.target.value)}
                       placeholder="yourhandle"
                       maxLength={20}
                       autoFocus
                       className="w-full pl-8 pr-4 py-3 rounded-xl bg-background border border-border focus:border-primary/60 focus:ring-2 focus:ring-primary/20 text-sm font-semibold outline-none transition-all"
                     />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs">
+                      {usernameStatus === 'checking' && (
+                        <span className="text-muted-foreground animate-pulse">Checking...</span>
+                      )}
+                      {usernameStatus === 'available' && (
+                        <span className="text-emerald-500 font-medium">✓</span>
+                      )}
+                      {usernameStatus === 'taken' && (
+                        <span className="text-destructive font-medium">✗</span>
+                      )}
+                      {usernameStatus === 'invalid' && (
+                        <span className="text-destructive font-medium">✗</span>
+                      )}
+                    </div>
                   </div>
                   {username.length > 0 && username.length < 3 && (
                     <p className="text-xs text-destructive mt-1.5 ml-1">At least 3 characters needed</p>
                   )}
-                  {username.length >= 3 && (
-                    <p className="text-xs text-emerald-500 mt-1.5 ml-1 flex items-center gap-1 font-medium">
-                      <Check className="w-3 h-3" />
-                      @{username} is available!
+                  {usernameStatusReason && usernameStatus !== 'available' && usernameStatus !== 'checking' && (
+                    <p className={`text-xs mt-1.5 ml-1 ${usernameStatus === 'taken' || usernameStatus === 'invalid' ? 'text-destructive' : 'text-amber-500'}`}>
+                      {usernameStatusReason}
                     </p>
                   )}
                 </motion.div>

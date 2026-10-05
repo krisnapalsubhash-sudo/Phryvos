@@ -37,6 +37,15 @@ export const RESERVED_USERNAMES = new Set([
 ]);
 
 /**
+ * Normalizes a username to its canonical form.
+ * Returns the trimmed, lowercased string regardless of validity.
+ * Use alongside validateUsername() for full validation.
+ */
+export function normalizeUsername(input: string): string {
+  return input.trim().toLowerCase();
+}
+
+/**
  * Validates a username against canonical Phryvos rules:
  * - 3 to 20 characters
  * - Trimmed and lowercased
@@ -51,7 +60,7 @@ export function validateUsername(input: unknown): { valid: boolean; error?: stri
     return { valid: false, error: 'Username must be a string' };
   }
 
-  const trimmed = input.trim().toLowerCase();
+  const trimmed = normalizeUsername(input);
 
   if (trimmed.length < 3) {
     return { valid: false, error: 'Username must be at least 3 characters' };
@@ -80,7 +89,7 @@ export function validateUsername(input: unknown): { valid: boolean; error?: stri
 
 // Canonical Username Zod Schema
 export const usernameSchema = z.preprocess(
-  (val) => (typeof val === 'string' ? val.trim().toLowerCase() : val),
+  (val) => (typeof val === 'string' ? normalizeUsername(val) : val),
   z
     .string()
     .min(3, 'Username must be at least 3 characters')

@@ -23,12 +23,15 @@ function createAuthConfig() {
           token.email = user.email;
           token.name = user.name;
           token.image = user.image;
+          // Store canonical username from DB (already normalized by authorize)
           token.username = (user as any).username;
           token.demoMode = user.demoMode || false;
         }
         if (trigger === 'update' && session) {
           token.name = session.name;
           token.image = session.image;
+          // Only update username if session provides a non-empty value
+          // This prevents stale JWTs from retaining old usernames after onboarding
           if (session.username) {
             token.username = session.username;
           }
