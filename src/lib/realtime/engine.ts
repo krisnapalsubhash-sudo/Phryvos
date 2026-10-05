@@ -6,6 +6,7 @@ import type {
 } from './types';
 import { safetyEngine } from '@/lib/safety/engine';
 import { privacyService, type MatchScoreResult } from '@/lib/safety/privacyService';
+import { redis, isRedisConfigured } from '@/lib/redis/client';
 
 interface ClientConnection {
   userId: string;
@@ -159,16 +160,20 @@ export class RealtimeServerEngine {
     return [];
   }
 
-  // Send SSE event to a specific user
-  public emitToUser(userId: string, event: RealtimeEventType, data: any) {
+  // Send SSE event to a specific user (delivers locally and optionally fans out via Redis)
+  public emitToUser(userId: string, event: RealtimeEventType, data: any, publishRedis: boolean = true) {
     const client = this.clients.get(userId);
-    if (!client) return;
+    if (client) {
+      try {
+        const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+        client.controller.enqueue(new TextEncoder().encode(payload));
+      } catch {
+        this.unregisterClient(userId, client.connectionId);
+      }
+    }
 
-    try {
-      const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-      client.controller.enqueue(new TextEncoder().encode(payload));
-    } catch {
-      this.unregisterClient(userId, client.connectionId);
+    if (publishRedis && isRedisConfigured()) {
+      redis.publish('phryvos:realtime:events', JSON.stringify({ userId, event, data })).catch(() => {});
     }
   }
 
@@ -466,17 +471,51 @@ export class RealtimeServerEngine {
     return { success: true };
   }
 
-  // Initialize privacy service caches from database (call on server startup)
+  private pubsubSubscriber: any = null;
+
+  // Initialize distributed Redis pub/sub listener when REDIS_URL is configured
+  public async initRedisPubSub(): Promise<void> {
+    if (this.pubsubSubscriber || !isRedisConfigured()) return;
+    try {
+      const Redis = (await import('ioredis')).default;
+      const sub = new Redis(process.env.REDIS_URL!, {
+        maxRetriesPerRequest: 1,
+        lazyConnect: true,
+        connectTimeout: 3000,
+        enableOfflineQueue: false,
+      });
+      sub.on('error', () => {});
+      await sub.connect();
+      await sub.subscribe('phryvos:realtime:events');
+      sub.on('message', (channel: string, messageStr: string) => {
+        if (channel === 'phryvos:realtime:events') {
+          try {
+            const { userId, event, data } = JSON.parse(messageStr);
+            if (userId && this.clients.has(userId)) {
+              this.emitToUser(userId, event, data, false);
+            }
+          } catch {}
+        }
+      });
+      this.pubsubSubscriber = sub;
+    } catch (err: any) {
+      console.warn('⚠️ [RealtimeEngine] Redis pub/sub initialization skipped:', err?.message || err);
+    }
+  }
+
+  // Initialize privacy service caches and distributed pubsub (call on server startup)
   public async initializeCaches(): Promise<void> {
     await privacyService.loadBlocksFromDB();
     await privacyService.loadSkipHistoryFromDB();
+    await this.initRedisPubSub();
   }
 
   // Friend Request
-  public sendFriendRequest(roomId: string, sender: RealtimeUser) {
+  public sendFriendRequest(roomId: string, sender: RealtimeUser & { requestId?: string }) {
     this.emitToRoom(roomId, 'connection_request', {
       roomId,
       from: sender,
+      requestId: sender.requestId,
     }, sender.id);
   }
 

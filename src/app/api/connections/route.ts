@@ -29,14 +29,16 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const cursor = searchParams.get('cursor');
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const parsedLimit = parseInt(searchParams.get('limit') || '50', 10);
+    const limit = Math.min(Math.max(isNaN(parsedLimit) ? 50 : parsedLimit, 1), 50);
 
     // Get connections where current user is the follower
     const connections = await prisma.connection.findMany({
       where: { userId: session.user.id },
       take: limit + 1,
       cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { connectedAt: 'desc' },
+      skip: cursor ? 1 : 0,
+      orderBy: [{ connectedAt: 'desc' }, { id: 'desc' }],
       include: {
         connectedUser: { select: USER_PUBLIC_FIELDS },
       },

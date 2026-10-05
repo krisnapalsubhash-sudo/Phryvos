@@ -339,6 +339,31 @@ export async function POST(req: NextRequest) {
           );
         }
 
+        // Audit #7 & #8: Durable DB persistence for registered users with idempotency check
+        const room = realtimeEngine.getRoom(roomId);
+        const partner = room?.participants.find((p) => p.id !== actingUserId);
+        const isCallerGuest = /^(anon|guest)[-_]/i.test(actingUserId);
+        const isPartnerGuest = partner ? /^(anon|guest)[-_]/i.test(partner.id) : true;
+
+        if (!isCallerGuest && !isPartnerGuest && partner) {
+          try {
+            const { conversationService } = await import('@/lib/services/conversationService');
+            const conv = await conversationService.getOrCreateConversation(actingUserId, partner.id);
+            if (conv) {
+              await conversationService.sendMessage({
+                conversationId: conv.id,
+                senderId: actingUserId,
+                receiverId: partner.id,
+                content: result.message?.text || text.trim(),
+                type: (type?.toUpperCase() as any) || 'TEXT',
+                clientMessageId: idempotencyKey || result.message?.id,
+              });
+            }
+          } catch (persistErr: any) {
+            console.warn(`[${requestId}] Realtime message DB persistence deferred:`, persistErr?.message || persistErr);
+          }
+        }
+
         return NextResponse.json({ success: true, message: result.message });
       }
 
@@ -364,8 +389,65 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        realtimeEngine.sendFriendRequest(roomId, actingUserMeta);
-        return NextResponse.json({ success: true, message: 'Friend request sent' });
+        const isCallerGuest = /^(anon|guest)[-_]/i.test(actingUserId);
+        const isPartnerGuest = /^(anon|guest)[-_]/i.test(partner.id);
+
+        let createdRequestId: string | undefined;
+
+        // Audit #9 & #10: Persist friend request into MessageRequest table with PENDING state
+        if (!isCallerGuest && !isPartnerGuest) {
+          const prisma = getPrismaClient();
+          try {
+            const existingConn = await prisma.connection.findUnique({
+              where: { userId_connectedUserId: { userId: actingUserId, connectedUserId: partner.id } },
+            });
+            if (existingConn) {
+              return NextResponse.json(
+                { error: 'Already connected with this user', code: 'ALREADY_CONNECTED', requestId },
+                { status: 400 }
+              );
+            }
+
+            const existingReq = await prisma.messageRequest.findFirst({
+              where: {
+                senderId: actingUserId,
+                receiverId: partner.id,
+                status: 'PENDING',
+              },
+            });
+
+            if (!existingReq) {
+              const newReq = await prisma.messageRequest.create({
+                data: {
+                  senderId: actingUserId,
+                  receiverId: partner.id,
+                  initialMessage: `Met in Stranger Radar orbit [${roomId}]`,
+                  status: 'PENDING',
+                },
+              });
+              createdRequestId = newReq.id;
+
+              await notificationService.createNotification({
+                userId: partner.id,
+                actorId: actingUserId,
+                type: 'CONNECTION_REQUEST',
+                title: 'New Connection Request',
+                body: `${actingUserMeta.displayName || 'Someone'} wants to connect with you from Radar!`,
+                metadata: { roomId, requestId: newReq.id },
+              });
+            } else {
+              createdRequestId = existingReq.id;
+            }
+          } catch (dbErr: any) {
+            console.warn(`[${requestId}] Friend request persistence error:`, dbErr?.message || dbErr);
+          }
+        }
+
+        realtimeEngine.sendFriendRequest(roomId, {
+          ...actingUserMeta,
+          requestId: createdRequestId,
+        } as any);
+        return NextResponse.json({ success: true, message: 'Friend request sent', requestId: createdRequestId });
       }
 
       case 'accept_friend_request': {
@@ -378,30 +460,94 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        realtimeEngine.acceptFriendRequest(roomId, actingUserMeta);
-
-        // If both users are registered database accounts, persist mutual connection & notification
         const isCallerGuest = /^(anon|guest)[-_]/i.test(actingUserId);
         const isPartnerGuest = /^(anon|guest)[-_]/i.test(partner.id);
 
+        // Audit #9 & #10: Atomically transition MessageRequest to ACCEPTED and create mutual Connection
         if (!isCallerGuest && !isPartnerGuest) {
+          const prisma = getPrismaClient();
           try {
-            await connectionService.connectUsers(actingUserId, partner.id);
-            await connectionService.connectUsers(partner.id, actingUserId);
+            await prisma.$transaction(async (tx) => {
+              await tx.messageRequest.updateMany({
+                where: {
+                  senderId: partner.id,
+                  receiverId: actingUserId,
+                  status: 'PENDING',
+                },
+                data: {
+                  status: 'ACCEPTED',
+                  respondedAt: new Date(),
+                },
+              });
 
-            await notificationService.createNotification({
-              userId: partner.id,
-              actorId: actingUserId,
-              type: 'CONNECTION_ACCEPTED',
-              title: 'Connection Accepted',
-              body: `${actingUserMeta.displayName || 'Someone'} accepted your friend request!`,
-              metadata: { roomId },
+              const existingConn1 = await tx.connection.findUnique({
+                where: { userId_connectedUserId: { userId: actingUserId, connectedUserId: partner.id } },
+              });
+              if (!existingConn1) {
+                await tx.connection.create({
+                  data: { userId: actingUserId, connectedUserId: partner.id },
+                });
+                await tx.user.update({
+                  where: { id: actingUserId },
+                  data: { following: { increment: 1 } },
+                });
+                await tx.user.update({
+                  where: { id: partner.id },
+                  data: { followers: { increment: 1 } },
+                });
+              }
+
+              const existingConn2 = await tx.connection.findUnique({
+                where: { userId_connectedUserId: { userId: partner.id, connectedUserId: actingUserId } },
+              });
+              if (!existingConn2) {
+                await tx.connection.create({
+                  data: { userId: partner.id, connectedUserId: actingUserId },
+                });
+                await tx.user.update({
+                  where: { id: partner.id },
+                  data: { following: { increment: 1 } },
+                });
+                await tx.user.update({
+                  where: { id: actingUserId },
+                  data: { followers: { increment: 1 } },
+                });
+              }
+
+              const directKey = [actingUserId, partner.id].sort().join(':');
+              const existingConv = await tx.conversation.findUnique({ where: { directKey } });
+              if (!existingConv) {
+                await tx.conversation.create({
+                  data: {
+                    directKey,
+                    participants: {
+                      create: [{ userId: actingUserId }, { userId: partner.id }],
+                    },
+                  },
+                });
+              }
+
+              await tx.notification.create({
+                data: {
+                  userId: partner.id,
+                  actorId: actingUserId,
+                  type: 'CONNECTION_ACCEPTED',
+                  title: 'Connection Accepted',
+                  body: `${actingUserMeta.displayName || 'Someone'} accepted your friend request!`,
+                  data: JSON.stringify({ roomId }),
+                },
+              });
             });
-          } catch (dbErr) {
-            console.warn(`[${requestId}] Connection persistence deferred:`, (dbErr as any)?.message);
+          } catch (dbErr: any) {
+            console.error(`[${requestId}] Failed to persist connection acceptance:`, dbErr);
+            return NextResponse.json(
+              { error: 'Failed to accept friend request in database', code: 'PERSISTENCE_FAILED', requestId },
+              { status: 500 }
+            );
           }
         }
 
+        realtimeEngine.acceptFriendRequest(roomId, actingUserMeta);
         return NextResponse.json({ success: true, message: 'Friend request accepted' });
       }
 
