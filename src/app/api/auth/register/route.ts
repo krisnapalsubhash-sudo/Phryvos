@@ -9,7 +9,7 @@ import crypto from 'crypto';
 export async function POST(request: NextRequest) {
   try {
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || '127.0.0.1';
-    const rateLimit = safetyEngine.checkRateLimit(`register:${ip}`, undefined, ip);
+    const rateLimit = safetyEngine.checkRateLimit({ userId: `register:${ip}`, clientIp: ip });
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Too many registration attempts. Please slow down and try again later.' },

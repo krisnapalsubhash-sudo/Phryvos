@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     const { email } = validation.data;
 
     // Rate limiting: prevent spamming password reset requests
-    const rateLimit = safetyEngine.checkRateLimit(`pw-reset:${email}`, undefined, ip);
+    const rateLimit = safetyEngine.checkRateLimit({ userId: `pw-reset:${email}`, clientIp: ip });
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Too many password reset requests. Please wait a few minutes before trying again.' },
