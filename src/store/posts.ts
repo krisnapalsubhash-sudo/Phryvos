@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { MOCK_POSTS } from '@/lib/mock';
 import type { Post } from '@/types';
+import { getSessionEpoch, isStaleRequest } from '@/lib/auth/session-epoch';
 
 const createServerSafeStorage = (): any => ({
   getItem: (name: string) => {
@@ -19,11 +20,14 @@ const createServerSafeStorage = (): any => ({
 });
 
 interface PostsState {
+  ownerUserId: string | null;
   posts: Post[];
   loading: boolean;
   error: string | null;
 
   // Local mutations (optimistic)
+  setOwnerUserId: (userId: string | null) => void;
+  reset: () => void;
   toggleLike: (postId: string) => void;
   addPost: (post: Post) => void;
   deletePost: (postId: string) => void;
@@ -59,9 +63,20 @@ async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> 
 export const usePostsStore = create<PostsState>()(
   persist(
     (set, get) => ({
+      ownerUserId: null,
       posts: MOCK_POSTS,
       loading: false,
       error: null,
+
+      setOwnerUserId: (userId) => set({ ownerUserId: userId }),
+
+      reset: () =>
+        set({
+          ownerUserId: null,
+          posts: MOCK_POSTS,
+          loading: false,
+          error: null,
+        }),
 
       // Local optimistic updates
       toggleLike: (postId: string) =>
@@ -91,10 +106,13 @@ export const usePostsStore = create<PostsState>()(
 
       // API-backed actions
       fetchFeed: async (cursor?: string) => {
+        const epoch = getSessionEpoch();
         set({ loading: true, error: null });
         try {
           const url = `/api/posts${cursor ? `?cursor=${cursor}` : ''}`;
           const data = await apiFetch<{ success: boolean; posts: Post[]; nextCursor?: string }>(url);
+
+          if (isStaleRequest(epoch)) return;
 
           if (data.success && data.posts) {
             set((state) => ({
@@ -105,18 +123,22 @@ export const usePostsStore = create<PostsState>()(
             set({ loading: false, error: 'Failed to fetch feed' });
           }
         } catch (error) {
+          if (isStaleRequest(epoch)) return;
           console.error('fetchFeed error:', error);
           set({ loading: false, error: error instanceof Error ? error.message : 'Failed to fetch feed' });
         }
       },
 
       createPost: async (postData) => {
+        const epoch = getSessionEpoch();
         set({ loading: true, error: null });
         try {
           const data = await apiFetch<{ success: boolean; post: Post }>('/api/posts', {
             method: 'POST',
             body: JSON.stringify(postData),
           });
+
+          if (isStaleRequest(epoch)) return null;
 
           if (data.success && data.post) {
             // Optimistic add is already done by component, but we can sync here
@@ -126,6 +148,7 @@ export const usePostsStore = create<PostsState>()(
           set({ loading: false, error: 'Failed to create post' });
           return null;
         } catch (error) {
+          if (isStaleRequest(epoch)) return null;
           console.error('createPost error:', error);
           set({ loading: false, error: error instanceof Error ? error.message : 'Failed to create post' });
           return null;
@@ -133,10 +156,13 @@ export const usePostsStore = create<PostsState>()(
       },
 
       toggleLikeAPI: async (postId: string) => {
+        const epoch = getSessionEpoch();
         try {
           const data = await apiFetch<{ success: boolean; liked: boolean; likesCount: number }>(`/api/posts/${postId}/like`, {
             method: 'POST',
           });
+
+          if (isStaleRequest(epoch)) return;
 
           if (data.success) {
             // Update local state to match server
@@ -149,6 +175,7 @@ export const usePostsStore = create<PostsState>()(
             }));
           }
         } catch (error) {
+          if (isStaleRequest(epoch)) return;
           console.error('toggleLikeAPI error:', error);
           // Revert optimistic update on error
           get().toggleLike(postId);
@@ -156,15 +183,19 @@ export const usePostsStore = create<PostsState>()(
       },
 
       deletePostAPI: async (postId: string) => {
+        const epoch = getSessionEpoch();
         try {
           const data = await apiFetch<{ success: boolean }>(`/api/posts/${postId}`, {
             method: 'DELETE',
           });
 
+          if (isStaleRequest(epoch)) return;
+
           if (data.success) {
             // Local delete already done optimistically
           }
         } catch (error) {
+          if (isStaleRequest(epoch)) return;
           console.error('deletePostAPI error:', error);
           // Could restore post on error
         }
@@ -174,6 +205,7 @@ export const usePostsStore = create<PostsState>()(
       name: 'phryvos-posts',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        ownerUserId: state.ownerUserId,
         posts: state.posts,
       }),
     }

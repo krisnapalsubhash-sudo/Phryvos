@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import type { User } from '@/types';
+import { getSessionEpoch, isStaleRequest } from '@/lib/auth/session-epoch';
 
 const createServerSafeStorage = (): StateStorage => ({
   getItem: (name: string) => {
@@ -36,6 +37,7 @@ interface AuthState {
   isHydrated: boolean;
   login: (username: string) => void;
   logout: () => void;
+  reset: () => void;
   updateProfile: (updates: Partial<ExtendedUser>) => void;
   setHydrated: (hydrated: boolean) => void;
 
@@ -76,7 +78,23 @@ export const useAuthStore = create<AuthState>()(
         console.warn('Direct useAuthStore.login is deprecated. Use NextAuth signIn() for server-validated auth.');
       },
 
-      logout: () => set({ user: null, isAuthenticated: false }),
+      logout: () => {
+        set({ user: null, isAuthenticated: false });
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem('phryvos-auth');
+          } catch {}
+        }
+      },
+
+      reset: () => {
+        set({ user: null, isAuthenticated: false, isLoading: false });
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.removeItem('phryvos-auth');
+          } catch {}
+        }
+      },
 
       updateProfile: (updates) =>
         set((state) => ({
@@ -87,29 +105,39 @@ export const useAuthStore = create<AuthState>()(
 
       // API-backed actions
       updateProfileAPI: async (updates) => {
+        const epoch = getSessionEpoch();
         try {
           const data = await apiFetch<{ success: boolean; user: ExtendedUser }>('/api/me/profile', {
             method: 'PATCH',
             body: JSON.stringify(updates),
           });
 
+          // Drop stale response if session changed or logged out
+          if (isStaleRequest(epoch)) return;
+
           if (data.success && data.user) {
             set({ user: data.user });
           }
         } catch (error) {
+          if (isStaleRequest(epoch)) return;
           console.error('updateProfileAPI error:', error);
           throw error;
         }
       },
 
       fetchProfile: async () => {
+        const epoch = getSessionEpoch();
         try {
           const data = await apiFetch<{ success: boolean; user: ExtendedUser }>('/api/me/profile');
+
+          // Drop stale response if session changed or logged out
+          if (isStaleRequest(epoch)) return;
 
           if (data.success && data.user) {
             set({ user: data.user, isAuthenticated: true });
           }
         } catch (error) {
+          if (isStaleRequest(epoch)) return;
           console.error('fetchProfile error:', error);
         }
       },

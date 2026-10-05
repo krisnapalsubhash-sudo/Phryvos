@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import type { Connection, User } from '@/types';
 import { MOCK_USERS } from '@/lib/mock/users';
+import { getSessionEpoch, isStaleRequest } from '@/lib/auth/session-epoch';
 
 const createServerSafeStorage = (): StateStorage => ({
   getItem: (name: string) => {
@@ -44,12 +45,15 @@ const INITIAL_CONNECTIONS: Connection[] = [
 ];
 
 interface ConnectionsState {
+  ownerUserId: string | null;
   connections: Connection[];
   pendingRequests: User[];
   loading: boolean;
   error: string | null;
 
   // Local mutations
+  setOwnerUserId: (userId: string | null) => void;
+  reset: () => void;
   addConnection: (user: Partial<User> & { id: string; username: string; displayName: string }) => void;
   removeConnection: (userId: string) => void;
   isConnection: (userId: string) => boolean;
@@ -85,10 +89,22 @@ async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> 
 export const useConnectionsStore = create<ConnectionsState>()(
   persist(
     (set, get) => ({
+      ownerUserId: null,
       connections: INITIAL_CONNECTIONS,
       pendingRequests: [],
       loading: false,
       error: null,
+
+      setOwnerUserId: (userId) => set({ ownerUserId: userId }),
+
+      reset: () =>
+        set({
+          ownerUserId: null,
+          connections: INITIAL_CONNECTIONS,
+          pendingRequests: [],
+          loading: false,
+          error: null,
+        }),
 
       addConnection: (userMeta) => {
         const { connections } = get();
@@ -148,9 +164,12 @@ export const useConnectionsStore = create<ConnectionsState>()(
 
       // API-backed actions
       fetchConnections: async () => {
+        const epoch = getSessionEpoch();
         set({ loading: true, error: null });
         try {
           const data = await apiFetch<{ success: boolean; connections: Connection[] }>('/api/connections');
+
+          if (isStaleRequest(epoch)) return;
 
           if (data.success && data.connections) {
             set({ connections: data.connections, loading: false });
@@ -158,12 +177,14 @@ export const useConnectionsStore = create<ConnectionsState>()(
             set({ loading: false, error: 'Failed to fetch connections' });
           }
         } catch (error) {
+          if (isStaleRequest(epoch)) return;
           console.error('fetchConnections error:', error);
           set({ loading: false, error: error instanceof Error ? error.message : 'Failed to fetch connections' });
         }
       },
 
       followUser: async (targetUserId: string) => {
+        const epoch = getSessionEpoch();
         set({ loading: true, error: null });
         try {
           const data = await apiFetch<{ success: boolean }>('/api/connections', {
@@ -171,23 +192,29 @@ export const useConnectionsStore = create<ConnectionsState>()(
             body: JSON.stringify({ targetUserId }),
           });
 
+          if (isStaleRequest(epoch)) return;
+
           if (data.success) {
             set({ loading: false });
           } else {
             set({ loading: false, error: 'Failed to follow user' });
           }
         } catch (error) {
+          if (isStaleRequest(epoch)) return;
           console.error('followUser error:', error);
           set({ loading: false, error: error instanceof Error ? error.message : 'Failed to follow user' });
         }
       },
 
       unfollowUser: async (targetUserId: string) => {
+        const epoch = getSessionEpoch();
         set({ loading: true, error: null });
         try {
           const data = await apiFetch<{ success: boolean }>(`/api/connections/${targetUserId}`, {
             method: 'DELETE',
           });
+
+          if (isStaleRequest(epoch)) return;
 
           if (data.success) {
             // Local remove
@@ -197,6 +224,7 @@ export const useConnectionsStore = create<ConnectionsState>()(
             set({ loading: false, error: 'Failed to unfollow user' });
           }
         } catch (error) {
+          if (isStaleRequest(epoch)) return;
           console.error('unfollowUser error:', error);
           set({ loading: false, error: error instanceof Error ? error.message : 'Failed to unfollow user' });
         }
@@ -206,6 +234,7 @@ export const useConnectionsStore = create<ConnectionsState>()(
       name: 'phryvos-connections',
       storage: createJSONStorage(createServerSafeStorage),
       partialize: (state) => ({
+        ownerUserId: state.ownerUserId,
         connections: state.connections,
         pendingRequests: state.pendingRequests,
       }),

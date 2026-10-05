@@ -27,6 +27,7 @@ interface FeaturesState {
   setMinimalistMode: (enabled: boolean) => void;
   applyPreset: (preset: 'full' | 'minimalist' | 'custom') => void;
   setSurveyData: (data: Partial<UserSurveyData>) => void;
+  resetSurvey: () => void;
   resetToDefaults: () => void;
 }
 
@@ -109,9 +110,15 @@ export const useFeaturesStore = create<FeaturesState>()(
           survey: { ...state.survey, ...data },
         })),
 
+      resetSurvey: () =>
+        set({
+          survey: {},
+        }),
+
       resetToDefaults: () =>
         set({
           flags: DEFAULT_FLAGS,
+          survey: {},
         }),
     }),
     {

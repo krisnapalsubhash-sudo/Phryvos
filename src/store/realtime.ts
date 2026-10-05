@@ -202,7 +202,18 @@ export const useRealtimeStore = create<RealtimeStoreState>((set, get) => ({
       eventSourceInstance.close();
       eventSourceInstance = null;
     }
-    set({ isConnected: false, isReconnecting: false, matchState: 'idle' });
+    set({
+      isConnected: false,
+      isReconnecting: false,
+      matchState: 'idle',
+      activeRoomId: null,
+      partner: null,
+      messages: [],
+      isPartnerTyping: false,
+      hasStrangerLeft: false,
+      friendRequestReceived: false,
+      friendRequestAccepted: false,
+    });
   },
 
   syncRoomHistory: async (roomId: string) => {

@@ -9,6 +9,7 @@ interface StoriesState {
   error: string | null;
 
   // Local mutations
+  reset: () => void;
   addStory: (story: Story) => void;
   markSeen: (storyId: string) => void;
   openStory: (storyId: string) => void;
@@ -48,6 +49,14 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
   error: null,
 
   // Local mutations
+  reset: () =>
+    set({
+      stories: MOCK_STORIES,
+      activeStoryId: null,
+      loading: false,
+      error: null,
+    }),
+
   addStory: (newStory: Story) =>
     set((state) => ({
       stories: [newStory, ...state.stories],

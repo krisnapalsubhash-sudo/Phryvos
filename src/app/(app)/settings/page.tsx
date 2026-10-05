@@ -28,6 +28,7 @@ import {
 import { useTheme } from 'next-themes';
 import { useThemeStore } from '@/store/theme';
 import { useAuthStore } from '@/store/auth';
+import { useAuth } from '@/hooks/useAuth';
 import { useFeaturesStore } from '@/store/features';
 import { sound } from '@/lib/sound';
 import { Button } from '@/components/ui/button';
@@ -36,7 +37,8 @@ import { Input } from '@/components/ui/input';
 export default function SettingsPage() {
   const { setTheme: setNextTheme } = useTheme();
   const { theme, setTheme: setStoreTheme } = useThemeStore();
-  const { user, logout, updateProfile } = useAuthStore();
+  const { user, updateProfile } = useAuthStore();
+  const { logout } = useAuth();
   const { flags, toggleFlag, setMinimalistMode, applyPreset, resetToDefaults } = useFeaturesStore();
 
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -406,9 +408,8 @@ export default function SettingsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                logout();
-                window.location.href = '/login';
+              onClick={async () => {
+                await logout();
               }}
               className="rounded-full border-red-500/30 text-red-500 hover:bg-red-500/10 text-xs gap-1.5 h-8"
             >
