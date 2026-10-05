@@ -114,21 +114,25 @@ export async function POST(
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
-    const comment = await prisma.comment.create({
-      data: {
-        postId: id,
-        authorId: session.user.id,
-        content,
-      },
-      include: {
-        author: { select: USER_PUBLIC_FIELDS },
-      },
-    });
+    // Atomic transaction: create comment and increment post commentsCount
+    const comment = await prisma.$transaction(async (tx) => {
+      const created = await tx.comment.create({
+        data: {
+          postId: id,
+          authorId: session.user.id,
+          content,
+        },
+        include: {
+          author: { select: USER_PUBLIC_FIELDS },
+        },
+      });
 
-    // Increment post comments count
-    await prisma.post.update({
-      where: { id },
-      data: { commentsCount: { increment: 1 } },
+      await tx.post.update({
+        where: { id },
+        data: { commentsCount: { increment: 1 } },
+      });
+
+      return created;
     });
 
     return NextResponse.json({

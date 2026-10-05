@@ -27,7 +27,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
     const cursor = searchParams.get('cursor');
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    // Enforce 1 <= limit <= 50 bounds
+    const rawLimit = parseInt(searchParams.get('limit') || '20', 10);
+    const limit = Math.min(Math.max(isNaN(rawLimit) ? 20 : rawLimit, 1), 50);
     const format = searchParams.get('format') as 'STANDARD' | 'RAW' | 'VOICE' | 'MIDNIGHT' | null;
     const followingOnly = searchParams.get('following') === 'true';
     const vibe = searchParams.get('vibe');
@@ -87,7 +89,7 @@ export async function GET(request: NextRequest) {
       where,
       take: limit + 1,
       cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         author: { select: USER_PUBLIC_FIELDS },
         _count: {
@@ -106,10 +108,27 @@ export async function GET(request: NextRequest) {
       nextCursor = nextPost!.id;
     }
 
-    // Format response
+    const ANONYMOUS_AUTHOR = {
+      id: 'anonymous',
+      username: 'anonymous',
+      displayName: 'Anonymous',
+      avatar: '👤',
+      bio: '',
+      location: '',
+      interests: [],
+      followers: 0,
+      following: 0,
+      postsCount: 0,
+      isOnline: false,
+      createdAt: new Date(0).toISOString(),
+    };
+
+    // Format response with strict anonymous masking
     const formattedPosts = posts.map((post) => ({
       id: post.id,
-      author: post.author,
+      author: post.isAnonymous && post.author.id !== session?.user?.id
+        ? ANONYMOUS_AUTHOR
+        : post.author,
       content: post.content,
       image: post.image,
       format: post.format,
@@ -174,29 +193,33 @@ export async function POST(request: NextRequest) {
       tags,
     } = validation.data;
 
-    const post = await prisma.post.create({
-      data: {
-        authorId: session.user.id,
-        content,
-        format,
-        image,
-        audioDuration,
-        voiceWaveform: voiceWaveform ?? [],
-        midnightGradient,
-        isAnonymous,
-        readingTime,
-        vibe,
-        tags,
-      },
-      include: {
-        author: { select: USER_PUBLIC_FIELDS },
-      },
-    });
+    // Atomic transaction: create post and increment user postsCount
+    const post = await prisma.$transaction(async (tx) => {
+      const created = await tx.post.create({
+        data: {
+          authorId: session.user.id,
+          content,
+          format,
+          image,
+          audioDuration,
+          voiceWaveform: voiceWaveform ?? [],
+          midnightGradient,
+          isAnonymous,
+          readingTime,
+          vibe,
+          tags,
+        },
+        include: {
+          author: { select: USER_PUBLIC_FIELDS },
+        },
+      });
 
-    // Update user's postsCount
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { postsCount: { increment: 1 } },
+      await tx.user.update({
+        where: { id: session.user.id },
+        data: { postsCount: { increment: 1 } },
+      });
+
+      return created;
     });
 
     return NextResponse.json({

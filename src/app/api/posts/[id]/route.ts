@@ -35,7 +35,10 @@ export async function GET(
         _count: {
           select: { likes: true, comments: true },
         },
-        likes: true,
+        likes: session?.user?.id ? {
+          where: { userId: session.user.id },
+          select: { id: true },
+        } : false,
         comments: {
           take: 10,
           orderBy: { createdAt: 'desc' },
@@ -50,11 +53,28 @@ export async function GET(
       return NextResponse.json({ error: 'Post not found' }, { status: 404 });
     }
 
+    const ANONYMOUS_AUTHOR = {
+      id: 'anonymous',
+      username: 'anonymous',
+      displayName: 'Anonymous',
+      avatar: '👤',
+      bio: '',
+      location: '',
+      interests: [],
+      followers: 0,
+      following: 0,
+      postsCount: 0,
+      isOnline: false,
+      createdAt: new Date(0).toISOString(),
+    };
+
     return NextResponse.json({
       success: true,
       post: {
         id: post.id,
-        author: post.author,
+        author: post.isAnonymous && post.author.id !== session?.user?.id
+          ? ANONYMOUS_AUTHOR
+          : post.author,
         content: post.content,
         image: post.image,
         format: post.format,
@@ -68,7 +88,7 @@ export async function GET(
         likesCount: post.likesCount,
         commentsCount: post.commentsCount,
         shares: post.shares,
-        isLiked: session?.user?.id ? post.likes.some((l) => l.userId === session.user.id) : false,
+        isLiked: session?.user?.id ? Boolean(post.likes && post.likes.length > 0) : false,
         isSaved: false,
         createdAt: post.createdAt.toISOString(),
         updatedAt: post.updatedAt.toISOString(),
@@ -200,16 +220,16 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden: Not post owner' }, { status: 403 });
     }
 
-    // Delete post (cascades to comments, likes via Prisma schema)
-    await prisma.post.delete({
-      where: { id },
-    });
-
-    // Decrement user's postsCount
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { postsCount: { decrement: 1 } },
-    });
+    // Atomic transaction: delete post and decrement user postsCount
+    await prisma.$transaction([
+      prisma.post.delete({
+        where: { id },
+      }),
+      prisma.user.update({
+        where: { id: session.user.id },
+        data: { postsCount: { decrement: 1 } },
+      }),
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (error) {

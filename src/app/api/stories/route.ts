@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
 
     const userId = searchParams.get('userId');
     const cursor = searchParams.get('cursor');
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const rawLimit = parseInt(searchParams.get('limit') || '50', 10);
+    const limit = Math.min(Math.max(isNaN(rawLimit) ? 50 : rawLimit, 1), 50);
 
     const where: any = {
       expiresAt: { gt: new Date() }, // Only active (non-expired) stories
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
       where,
       take: limit + 1,
       cursor: cursor ? { id: cursor } : undefined,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         author: { select: USER_PUBLIC_FIELDS },
         storyViews: session?.user?.id
