@@ -11,9 +11,11 @@ import {
   User,
   Settings,
   Sparkles,
+  Shield,
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/layout/ThemeToggle';
 import { sound } from '@/lib/sound';
+import { useAuthStore } from '@/store/auth';
 
 const navItems = [
   { icon: Home, label: 'Feed', href: '/feed' },
@@ -26,6 +28,11 @@ const navItems = [
 
 export function LeftRail() {
   const pathname = usePathname();
+  const { user } = useAuthStore();
+
+  // Check if user is admin
+  const adminId = process.env.NEXT_PUBLIC_ADMIN_ID;
+  const isAdmin = user?.id === adminId;
 
   return (
     <nav
@@ -33,10 +40,10 @@ export function LeftRail() {
       aria-label="Main navigation"
     >
       {/* Brand Icon */}
-      <Link 
-        href="/feed" 
+      <Link
+        href="/feed"
         onClick={() => sound.playPop(480)}
-        className="mb-8 group relative" 
+        className="mb-8 group relative"
         aria-label="Phryvos Home"
       >
         <div className="w-10 h-10 rounded-2xl overflow-hidden shadow-md group-hover:scale-105 transition-all border border-white/10">
@@ -83,6 +90,26 @@ export function LeftRail() {
             </Link>
           );
         })}
+
+        {/* Admin Dashboard Link - only visible to admin */}
+        {isAdmin && (
+          <Link
+            href="/admin/dashboard"
+            onClick={() => sound.playPop(640)}
+            className="relative flex flex-col items-center justify-center w-full h-12 rounded-2xl transition-all group bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 hover:text-amber-400 border border-amber-500/20"
+            aria-label="Admin Dashboard"
+          >
+            <div className="relative">
+              <Shield className="w-5 h-5 transition-transform group-hover:scale-110" />
+              <span className="absolute -top-1 -right-1.5 w-4 h-4 text-[9px] font-bold rounded-full bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                A
+              </span>
+            </div>
+            <span className="text-[10px] mt-1 tracking-tight font-semibold">
+              Admin
+            </span>
+          </Link>
+        )}
       </div>
 
       {/* Spacer */}

@@ -51,6 +51,9 @@ export async function GET(
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: {
         author: { select: USER_PUBLIC_FIELDS },
+        commentLikes: session?.user?.id
+          ? { where: { userId: session.user.id }, select: { id: true } }
+          : false,
       },
     });
 
@@ -67,7 +70,7 @@ export async function GET(
         author: c.author,
         content: c.content,
         likes: c.likes,
-        isLiked: c.isLiked,
+        isLiked: c.commentLikes && c.commentLikes.length > 0,
         createdAt: c.createdAt.toISOString(),
         updatedAt: c.updatedAt.toISOString(),
       })),

@@ -21,10 +21,18 @@ export function getPrismaClient(): PrismaClient {
   // Use the @prisma/adapter-pg with pure JS pg driver to bypass native binary limitations
   const { Pool } = require('pg');
   const { PrismaPg } = require('@prisma/adapter-pg');
-  
+
+  // SSL configuration: require valid CA verification in production
+  const isProduction = process.env.NODE_ENV === 'production';
+  const sslConfig = isProduction
+    ? (process.env.DATABASE_CA_CERT
+        ? { rejectUnauthorized: true, ca: process.env.DATABASE_CA_CERT }
+        : { rejectUnauthorized: true })
+    : { rejectUnauthorized: false };
+
   const pool = new Pool({
     connectionString: databaseUrl,
-    ssl: { rejectUnauthorized: false },
+    ssl: sslConfig,
   });
 
   const adapter = new PrismaPg(pool);

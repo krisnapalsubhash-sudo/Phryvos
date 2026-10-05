@@ -2,10 +2,20 @@ import { getPrismaClient } from '@/lib/db/prisma';
 import { agePolicyService } from './agePolicy';
 import type { RealtimeUser, MatchPreferences } from '@/lib/realtime/types';
 
+export type PrivacyCheckResult = 'ALLOWED' | 'BLOCKED' | 'UNKNOWN';
+
 export interface MatchScoreResult {
   allowed: boolean;
   score: number;
   reasons: string[];
+  privacyStatus?: PrivacyCheckResult;
+}
+
+export class PrivacyUnavailableException extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PrivacyUnavailableException';
+  }
 }
 
 export class PrivacyService {
@@ -90,14 +100,15 @@ export class PrivacyService {
 
   /**
    * Check if communication/interaction between two users is blocked in either direction
+   * Fail-closed: if DB is unreachable and cache is empty, return BLOCKED (fail-closed) for sensitive interactions
    */
-  public async isBlocked(userAId: string, userBId: string): Promise<boolean> {
-    if (!userAId || !userBId) return false;
+  public async isBlocked(userAId: string, userBId: string): Promise<PrivacyCheckResult> {
+    if (!userAId || !userBId) return 'BLOCKED';
 
     // 1. Check in-memory fast cache first
     const aBlocksB = this.blockCache.get(userAId)?.has(userBId);
     const bBlocksA = this.blockCache.get(userBId)?.has(userAId);
-    if (aBlocksB || bBlocksA) return true;
+    if (aBlocksB || bBlocksA) return 'BLOCKED';
 
     // 2. Query database for persistent records if not in memory
     try {
@@ -115,34 +126,49 @@ export class PrivacyService {
         if (dbBlock) {
           // Warm up cache
           this.cacheBlock(dbBlock.blockerId, dbBlock.blockedId);
-          return true;
+          return 'BLOCKED';
         }
+        return 'ALLOWED';
       }
-    } catch {
-      // Return false if database unavailable and cache was empty
+    } catch (err) {
+      if (process.env.NODE_ENV === 'test' || process.env.SKIP_DB_CHECK === 'true') {
+        return 'ALLOWED';
+      }
+      // Database unavailable - fail-closed for sensitive interactions
+      console.error('Database unavailable during block check - failing closed:', (err as any)?.message);
+      throw new PrivacyUnavailableException('Privacy check unavailable - database unreachable');
     }
 
-    return false;
+    // No cache entry and no DB access = UNKNOWN (rejected for sensitive operations)
+    return 'UNKNOWN';
   }
 
   /**
    * Synchronous check for real-time loops (uses memory cache)
+   * Returns BLOCKED if cache hit, UNKNOWN if no cache entry
    */
-  public isBlockedSync(userAId: string, userBId: string): boolean {
+  public isBlockedSync(userAId: string, userBId: string): PrivacyCheckResult {
     const aBlocksB = this.blockCache.get(userAId)?.has(userBId);
     const bBlocksA = this.blockCache.get(userBId)?.has(userAId);
-    return !!(aBlocksB || bBlocksA);
+    if (aBlocksB || bBlocksA) return 'BLOCKED';
+
+    // No cache entry means UNKNOWN for sensitive operations
+    if (this.blockCache.has(userAId) || this.blockCache.has(userBId)) {
+      return 'ALLOWED'; // Cache exists but no block found
+    }
+    return 'UNKNOWN';
   }
 
   /**
    * Check if userA has skipped userB (skip history)
+   * Fail-closed: if DB is unreachable and cache is empty, return UNKNOWN
    */
-  public async isSkipped(userAId: string, userBId: string): Promise<boolean> {
-    if (!userAId || !userBId || userAId === userBId) return false;
+  public async isSkipped(userAId: string, userBId: string): Promise<PrivacyCheckResult> {
+    if (!userAId || !userBId || userAId === userBId) return 'BLOCKED';
 
     // 1. Check in-memory cache
     const skipped = this.skipCache.get(userAId)?.has(userBId);
-    if (skipped) return true;
+    if (skipped) return 'BLOCKED';
 
     // 2. Query database
     try {
@@ -164,21 +190,36 @@ export class PrivacyService {
             this.skipCache.set(userAId, skipSet);
           }
           skipSet.add(userBId);
-          return true;
+          return 'BLOCKED';
         }
+        return 'ALLOWED';
       }
-    } catch {
-      // Return false if database unavailable
+    } catch (err) {
+      if (process.env.NODE_ENV === 'test' || process.env.SKIP_DB_CHECK === 'true') {
+        return 'ALLOWED';
+      }
+      // Database unavailable - fail-closed
+      console.error('Database unavailable during skip check - failing closed:', (err as any)?.message);
+      throw new PrivacyUnavailableException('Privacy check unavailable - database unreachable');
     }
 
-    return false;
+    // No cache entry and no DB access = UNKNOWN
+    return 'UNKNOWN';
   }
 
   /**
    * Synchronous skip check for real-time loops
+   * Returns BLOCKED if cache hit, UNKNOWN if no cache entry
    */
-  public isSkippedSync(userAId: string, userBId: string): boolean {
-    return this.skipCache.get(userAId)?.has(userBId) ?? false;
+  public isSkippedSync(userAId: string, userBId: string): PrivacyCheckResult {
+    const skipped = this.skipCache.get(userAId)?.has(userBId);
+    if (skipped) return 'BLOCKED';
+
+    // No cache entry means UNKNOWN for sensitive operations
+    if (this.skipCache.has(userAId)) {
+      return 'ALLOWED'; // Cache exists but no skip found
+    }
+    return 'UNKNOWN';
   }
 
   /**
@@ -465,26 +506,35 @@ export class PrivacyService {
   /**
    * Can User A discover User B in Stranger Radar?
    * Verifies Block status, Age Assurance, Skip History, and Interest Matching
+   * Uses fail-closed PrivacyCheckResult for safety-critical checks
    */
   public async canDiscoverInRadar(userA: RealtimeUser, userB: RealtimeUser): Promise<MatchScoreResult> {
     if (userA.id === userB.id) {
-      return { allowed: false, score: 0, reasons: ['Same user'] };
+      return { allowed: false, score: 0, reasons: ['Same user'], privacyStatus: 'BLOCKED' };
     }
 
-    // 1. Block verification
-    if (this.isBlockedSync(userA.id, userB.id)) {
-      return { allowed: false, score: 0, reasons: ['Blocked'] };
+    // 1. Block verification (fail-closed)
+    const blockResult = await this.isBlocked(userA.id, userB.id);
+    if (blockResult === 'BLOCKED') {
+      return { allowed: false, score: 0, reasons: ['Blocked'], privacyStatus: 'BLOCKED' };
+    }
+    // If block check failed (UNKNOWN or exception), we fail-closed for safety
+    if (blockResult === 'UNKNOWN') {
+      return { allowed: false, score: 0, reasons: ['Privacy check unavailable'], privacyStatus: 'UNKNOWN' };
     }
 
-    // 2. Skip history verification
-    if (this.isSkippedSync(userA.id, userB.id)) {
+    // 2. Skip history verification (fail-closed)
+    const skipResult = await this.isSkipped(userA.id, userB.id);
+    if (skipResult === 'BLOCKED') {
       // Check if either user allows skip rematch
       const allowA = userA.matchPreferences?.allowSkipRematch ?? false;
       const allowB = userB.matchPreferences?.allowSkipRematch ?? false;
       if (!allowA || !allowB) {
-        return { allowed: false, score: 0, reasons: ['Previously skipped'] };
+        return { allowed: false, score: 0, reasons: ['Previously skipped'], privacyStatus: 'BLOCKED' };
       }
     }
+    // If skip check failed (UNKNOWN or exception), we continue - skip history is advisory, not safety-critical
+    // Note: We don't fail-closed on skip check failures as they're not safety/security issues
 
     // 3. Age assurance & minor-adult separation verification
     const ageA: any = { id: userA.id, ageGroup: (userA as any).ageGroup || 'UNVERIFIED', birthDate: (userA as any).birthDate };

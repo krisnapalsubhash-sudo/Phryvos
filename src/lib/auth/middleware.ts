@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { auth } from '@/lib/auth/config';
 
 const PROTECTED_PATHS = [
   '/feed',
@@ -35,14 +36,11 @@ function isValidCallbackUrl(callbackUrl: string | null): boolean {
   }
 }
 
-export default function middleware(req: NextRequest) {
-  const sessionToken =
-    req.cookies.get('authjs.session-token')?.value ||
-    req.cookies.get('__Secure-authjs.session-token')?.value ||
-    req.cookies.get('next-auth.session-token')?.value ||
-    req.cookies.get('__Secure-next-auth.session-token')?.value;
+export default async function middleware(req: NextRequest) {
+  // Use NextAuth's auth() to validate session server-side
+  const session = await auth();
+  const isLoggedIn = !!session?.user?.id;
 
-  const isLoggedIn = !!sessionToken;
   const pathname = req.nextUrl.pathname;
   const method = req.method;
   const searchParams = req.nextUrl.searchParams;

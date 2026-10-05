@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
   MessageSquare,
@@ -9,28 +9,20 @@ import {
   Settings,
   BarChart3,
   AlertCircle,
-  CheckCircle,
-  XCircle,
   RefreshCw,
   Search,
-  Filter,
-  MoreVertical,
   Ban,
   Trash2,
   Eye,
-  UserX,
   UserCheck,
-  Database,
-  FileText,
-  Bell,
   Zap,
   ShieldAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-
-// Admin ID - will be configured via environment variable in production
-const ADMIN_USER_ID = process.env.NEXT_PUBLIC_ADMIN_ID;
+import { useAdminAccess } from '@/hooks/useAdminAccess';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 interface DashboardStats {
   totalUsers: number;
@@ -47,84 +39,90 @@ interface User {
   email: string;
   role: string;
   isBanned: boolean;
-  createdAt: string;
+  isOnline: boolean;
   postsCount: number;
+  avatar: string;
+  createdAt: string;
 }
 
 interface Post {
   id: string;
   content: string;
   format: string;
+  likesCount: number;
+  commentsCount: number;
+  createdAt: string;
   author: {
     id: string;
     username: string;
     displayName: string;
+    avatar: string;
+    isBanned: boolean;
   };
-  createdAt: string;
-  likesCount: number;
-  commentsCount: number;
 }
 
 export default function AdminDashboardPage() {
+  const router = useRouter();
+  const { isAdmin, isLoading: checkLoading } = useAdminAccess();
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'posts' | 'settings'>('overview');
   const [searchQuery, setSearchQuery] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [checkLoading, setCheckLoading] = useState(true);
+  const [userCursor, setUserCursor] = useState<string | null>(null);
+  const [postCursor, setPostCursor] = useState<string | null>(null);
+  const [hasMoreUsers, setHasMoreUsers] = useState(false);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
+
+  // Redirect if not admin
+  useEffect(() => {
+    if (!checkLoading && !isAdmin) {
+      router.push('/404');
+    }
+  }, [isAdmin, checkLoading, router]);
 
   useEffect(() => {
-    checkAdminAccess();
-  }, []);
-
-  const checkAdminAccess = async () => {
-    try {
-      // Check if current user matches admin ID
-      const sessionResponse = await fetch('/api/auth/me');
-      const sessionData = await sessionResponse.json();
-
-      if (sessionData.success && sessionData.user) {
-        const isAdminUser = sessionData.user.id === ADMIN_USER_ID;
-        setIsAdmin(isAdminUser);
-
-        if (isAdminUser) {
-          loadDashboardData();
-        }
-      }
-    } catch (error) {
-      console.error('Failed to check admin access:', error);
-    } finally {
-      setCheckLoading(false);
+    if (isAdmin) {
+      loadDashboardData();
     }
-  };
+  }, [isAdmin]);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (appendUsers = false) => {
+    if (!isAdmin) return;
+
     setLoading(true);
     try {
       // Load stats
-      const statsResponse = await fetch('/api/admin/stats');
-      const statsData = await statsResponse.json();
+      const statsRes = await fetch('/api/admin/stats');
+      const statsData = await statsRes.json();
       if (statsData.success) {
         setStats(statsData.stats);
       }
 
       // Load users
-      const usersResponse = await fetch('/api/admin/users?limit=50');
-      const usersData = await usersResponse.json();
+      const usersUrl = `/api/admin/users?limit=50${searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}${userCursor ? `&cursor=${userCursor}` : ''}`;
+      const usersRes = await fetch(usersUrl);
+      const usersData = await usersRes.json();
       if (usersData.success) {
-        setUsers(usersData.users);
+        setUsers(appendUsers ? [...users, ...usersData.users] : usersData.users);
+        setHasMoreUsers(usersData.hasMore);
+        setUserCursor(usersData.nextCursor);
       }
 
       // Load posts
-      const postsResponse = await fetch('/api/admin/posts?limit=20');
-      const postsData = await postsResponse.json();
+      const postsUrl = `/api/admin/posts?limit=20${postCursor ? `&cursor=${postCursor}` : ''}`;
+      const postsRes = await fetch(postsUrl);
+      const postsData = await postsRes.json();
       if (postsData.success) {
-        setPosts(postsData.posts);
+        setPosts(appendUsers ? [...posts, ...postsData.posts] : postsData.posts);
+        setHasMorePosts(postsData.hasMore);
+        setPostCursor(postsData.nextCursor);
       }
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
+      toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
@@ -140,7 +138,6 @@ export default function AdminDashboardPage() {
 
       const data = await response.json();
       if (data.success) {
-        // Update local state
         setUsers((prev) =>
           prev.map((u) =>
             u.id === userId ? { ...u, isBanned: ban } : u
@@ -155,14 +152,16 @@ export default function AdminDashboardPage() {
               }
             : prev
         );
+        toast.success(ban ? 'User banned successfully' : 'User unbanned successfully');
       }
     } catch (error) {
       console.error('Failed to ban/unban user:', error);
+      toast.error('Failed to update user status');
     }
   };
 
   const handleDeletePost = async (postId: string) => {
-    if (!confirm('Are you sure you want to delete this post?')) return;
+    if (!confirm('Are you sure you want to delete this post? This action cannot be undone.')) return;
 
     try {
       const response = await fetch(`/api/admin/posts/${postId}`, {
@@ -175,9 +174,11 @@ export default function AdminDashboardPage() {
         setStats((prev) =>
           prev ? { ...prev, totalPosts: prev.totalPosts - 1 } : prev
         );
+        toast.success('Post deleted successfully');
       }
     } catch (error) {
       console.error('Failed to delete post:', error);
+      toast.error('Failed to delete post');
     }
   };
 
@@ -206,7 +207,7 @@ export default function AdminDashboardPage() {
           <ShieldAlert className="w-16 h-16 mx-auto text-destructive" />
           <h1 className="text-2xl font-bold text-foreground">Access Denied</h1>
           <p className="text-muted-foreground">You don't have permission to access this page.</p>
-          <Button onClick={() => (window.location.href = '/feed')} variant="outline">
+          <Button onClick={() => router.push('/feed')} variant="outline">
             Return to Feed
           </Button>
         </div>
@@ -229,12 +230,13 @@ export default function AdminDashboardPage() {
             </div>
           </div>
           <Button
-            onClick={loadDashboardData}
+            onClick={() => loadDashboardData()}
             variant="outline"
             size="sm"
             className="gap-2"
+            disabled={loading}
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
@@ -276,7 +278,7 @@ export default function AdminDashboardPage() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-border pb-4">
+        <div className="flex gap-2 mb-6 border-b border-border pb-4 overflow-x-auto">
           {[
             { id: 'overview', label: 'Overview', icon: BarChart3 },
             { id: 'users', label: 'Users', icon: Users },
@@ -286,7 +288,7 @@ export default function AdminDashboardPage() {
             <button
               key={id}
               onClick={() => setActiveTab(id as any)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === id
                   ? 'bg-primary text-white'
                   : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -299,36 +301,41 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Content */}
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <RefreshCw className="w-8 h-8 animate-spin text-primary" />
-          </div>
-        ) : (
+        <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
             transition={{ duration: 0.2 }}
           >
-            {activeTab === 'overview' && (
-              <OverviewTab posts={posts} users={users} />
-            )}
-            {activeTab === 'users' && (
+            {loading && activeTab === 'overview' ? (
+              <div className="flex items-center justify-center py-20">
+                <RefreshCw className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : activeTab === 'overview' ? (
+              <OverviewTab posts={posts.slice(0, 5)} users={users.slice(0, 5)} />
+            ) : activeTab === 'users' ? (
               <UsersTab
                 users={filteredUsers}
                 onBan={handleBanUser}
                 searchQuery={searchQuery}
                 onSearch={setSearchQuery}
+                onLoadMore={() => loadDashboardData(true)}
+                hasMore={hasMoreUsers}
               />
-            )}
-            {activeTab === 'posts' && (
-              <PostsTab posts={posts} onDelete={handleDeletePost} />
-            )}
-            {activeTab === 'settings' && (
+            ) : activeTab === 'posts' ? (
+              <PostsTab
+                posts={posts}
+                onDelete={handleDeletePost}
+                onLoadMore={() => loadDashboardData(true)}
+                hasMore={hasMorePosts}
+              />
+            ) : (
               <SettingsTab />
             )}
           </motion.div>
-        )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -375,20 +382,22 @@ function OverviewTab({ posts, users }: { posts: Post[]; users: User[] }) {
         <div className="bg-card border border-border rounded-2xl p-6">
           <h3 className="text-sm font-bold text-foreground mb-4">Recent Users</h3>
           <div className="space-y-3">
-            {users.slice(0, 5).map((user) => (
+            {users.map((user) => (
               <div key={user.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm">
-                    {user.displayName.charAt(0)}
+                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium">
+                    {user.avatar || user.displayName.charAt(0)}
                   </div>
                   <div>
                     <p className="text-sm font-medium text-foreground">{user.displayName}</p>
                     <p className="text-xs text-muted-foreground">@{user.username}</p>
                   </div>
                 </div>
-                <Badge variant={user.isBanned ? 'destructive' : 'secondary'} size="sm">
-                  {user.isBanned ? 'Banned' : 'Active'}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={user.isBanned ? 'destructive' : 'secondary'} size="sm">
+                    {user.isBanned ? 'Banned' : user.isOnline ? 'Online' : 'Active'}
+                  </Badge>
+                </div>
               </div>
             ))}
           </div>
@@ -397,15 +406,15 @@ function OverviewTab({ posts, users }: { posts: Post[]; users: User[] }) {
         <div className="bg-card border border-border rounded-2xl p-6">
           <h3 className="text-sm font-bold text-foreground mb-4">Recent Posts</h3>
           <div className="space-y-3">
-            {posts.slice(0, 5).map((post) => (
+            {posts.map((post) => (
               <div key={post.id} className="flex items-start justify-between">
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 mr-3">
                   <p className="text-sm text-foreground line-clamp-2">{post.content}</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     by @{post.author.username}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 ml-3 text-xs text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
                   <span>{post.likesCount} likes</span>
                 </div>
               </div>
@@ -422,11 +431,15 @@ function UsersTab({
   onBan,
   searchQuery,
   onSearch,
+  onLoadMore,
+  hasMore,
 }: {
   users: User[];
   onBan: (id: string, ban: boolean) => void;
   searchQuery: string;
   onSearch: (q: string) => void;
+  onLoadMore: () => void;
+  hasMore: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -461,7 +474,7 @@ function UsersTab({
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium">
-                        {user.displayName.charAt(0)}
+                        {user.avatar || user.displayName.charAt(0)}
                       </div>
                       <div>
                         <p className="text-sm font-medium text-foreground">{user.displayName}</p>
@@ -473,7 +486,7 @@ function UsersTab({
                   <td className="px-4 py-3 text-sm text-foreground">{user.postsCount}</td>
                   <td className="px-4 py-3">
                     <Badge variant={user.isBanned ? 'destructive' : 'secondary'} size="sm">
-                      {user.isBanned ? 'Banned' : 'Active'}
+                      {user.isBanned ? 'Banned' : user.isOnline ? 'Online' : 'Active'}
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
@@ -483,6 +496,7 @@ function UsersTab({
                         size="sm"
                         className="h-8 w-8 p-0"
                         onClick={() => onBan(user.id, !user.isBanned)}
+                        title={user.isBanned ? 'Unban user' : 'Ban user'}
                       >
                         {user.isBanned ? (
                           <UserCheck className="w-4 h-4 text-emerald-500" />
@@ -490,7 +504,12 @@ function UsersTab({
                           <Ban className="w-4 h-4 text-destructive" />
                         )}
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        title="View user"
+                      >
                         <Eye className="w-4 h-4 text-muted-foreground" />
                       </Button>
                     </div>
@@ -500,9 +519,25 @@ function UsersTab({
             </tbody>
           </table>
         </div>
-        {users.length === 0 && (
+        {users.length === 0 && !searchQuery && (
           <div className="py-12 text-center text-muted-foreground">
             No users found
+          </div>
+        )}
+        {users.length === 0 && searchQuery && (
+          <div className="py-12 text-center text-muted-foreground">
+            No users match your search
+          </div>
+        )}
+        {hasMore && (
+          <div className="p-4 border-t border-border">
+            <Button
+              variant="outline"
+              onClick={onLoadMore}
+              className="w-full"
+            >
+              Load More Users
+            </Button>
           </div>
         )}
       </div>
@@ -513,9 +548,13 @@ function UsersTab({
 function PostsTab({
   posts,
   onDelete,
+  onLoadMore,
+  hasMore,
 }: {
   posts: Post[];
   onDelete: (id: string) => void;
+  onLoadMore: () => void;
+  hasMore: boolean;
 }) {
   return (
     <div className="space-y-4">
@@ -527,10 +566,15 @@ function PostsTab({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
-                      {post.author.displayName.charAt(0)}
+                      {post.author.avatar || post.author.displayName.charAt(0)}
                     </div>
                     <span className="text-sm font-medium text-foreground">@{post.author.username}</span>
-                    <span className="text-xs text-muted-foreground">{post.format}</span>
+                    <span className="text-xs text-muted-foreground px-2 py-0.5 bg-secondary rounded-full">
+                      {post.format?.toLowerCase()}
+                    </span>
+                    {post.author.isBanned && (
+                      <Badge variant="destructive" size="sm">Banned</Badge>
+                    )}
                   </div>
                   <p className="text-sm text-foreground line-clamp-3">{post.content}</p>
                 </div>
@@ -541,6 +585,7 @@ function PostsTab({
                     size="sm"
                     className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                     onClick={() => onDelete(post.id)}
+                    title="Delete post"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -552,6 +597,17 @@ function PostsTab({
         {posts.length === 0 && (
           <div className="py-12 text-center text-muted-foreground">
             No posts found
+          </div>
+        )}
+        {hasMore && (
+          <div className="p-4 border-t border-border">
+            <Button
+              variant="outline"
+              onClick={onLoadMore}
+              className="w-full"
+            >
+              Load More Posts
+            </Button>
           </div>
         )}
       </div>
@@ -570,7 +626,7 @@ function SettingsTab() {
               <p className="text-sm font-medium text-foreground">Maintenance Mode</p>
               <p className="text-xs text-muted-foreground">Temporarily disable user access</p>
             </div>
-            <button className="w-11 h-6 bg-secondary rounded-full relative transition-colors">
+            <button className="w-11 h-6 bg-secondary rounded-full relative transition-colors" aria-label="Toggle maintenance mode">
               <span className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform" />
             </button>
           </div>
@@ -579,7 +635,7 @@ function SettingsTab() {
               <p className="text-sm font-medium text-foreground">Registration</p>
               <p className="text-xs text-muted-foreground">Allow new user registrations</p>
             </div>
-            <button className="w-11 h-6 bg-primary rounded-full relative">
+            <button className="w-11 h-6 bg-primary rounded-full relative" aria-label="Toggle registration">
               <span className="absolute right-1 top-1 w-4 h-4 bg-white rounded-full transition-transform" />
             </button>
           </div>
@@ -588,7 +644,7 @@ function SettingsTab() {
               <p className="text-sm font-medium text-foreground">Auto-moderation</p>
               <p className="text-xs text-muted-foreground">AI-powered content filtering</p>
             </div>
-            <button className="w-11 h-6 bg-secondary rounded-full relative transition-colors">
+            <button className="w-11 h-6 bg-secondary rounded-full relative transition-colors" aria-label="Toggle auto-moderation">
               <span className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition-transform" />
             </button>
           </div>

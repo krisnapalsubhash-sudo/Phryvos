@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
         author: story.author,
         images: story.images,
         views: story.views,
-        hasSeen: Boolean(story.storyViews && story.storyViews.length > 0),
+        hasSeen: session?.user?.id ? Boolean(story.storyViews && story.storyViews.length > 0) : false,
         createdAt: story.createdAt.toISOString(),
         expiresAt: story.expiresAt.toISOString(),
       })),

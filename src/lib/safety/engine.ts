@@ -193,7 +193,7 @@ export class SafetyEngine {
   }
 
   public isUserBlocked(sourceUserId: string, targetUserId: string): boolean {
-    return privacyService.isBlockedSync(sourceUserId, targetUserId);
+    return privacyService.isBlockedSync(sourceUserId, targetUserId) === 'BLOCKED';
   }
 
   // Report user with anti-abuse validation & awaited persistence (Audit #10 & #12)

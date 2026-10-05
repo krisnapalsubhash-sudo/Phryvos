@@ -65,7 +65,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       views,
-      hasSeen: true,
+      hasSeen: session?.user?.id ? true : false,
     });
   } catch (error) {
     console.error('View story error:', error);

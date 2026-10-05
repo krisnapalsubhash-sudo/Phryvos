@@ -1,8 +1,5 @@
 #!/usr/bin/env node
 
-import { execSync } from 'child_process';
-import { readFileSync, writeFileSync } from 'fs';
-
 /**
  * Script to help create an admin account for the Phryvos dashboard
  *
@@ -14,24 +11,45 @@ import { readFileSync, writeFileSync } from 'fs';
  * Or, if you have database access, you can run the SQL directly
  */
 
-async function main() {
+import { readFileSync, writeFileSync } from 'fs';
+
+function main() {
   console.log('\n🔧 Phryvos Admin Account Setup');
   console.log('================================\n');
 
-  console.log('Option 1: Register normally then promote to admin');
+  console.log('📋 Step-by-step guide:');
+  console.log('');
+  console.log('Option 1: Register normally then promote to admin (Recommended)');
   console.log('1. Visit http://localhost:4000/register');
   console.log('2. Create your account');
-  console.log('3. Login and check your user ID in localStorage');
-  console.log('4. Run: pnpm exec tsx scripts/set-admin-id.ts YOUR_USER_ID\n');
+  console.log('3. Login and open browser dev tools (F12)');
+  console.log('4. Go to Application → Local Storage → http://localhost:4000');
+  console.log('5. Look for "zustand-phryvos-auth" key');
+  console.log('6. Find your user.id in the JSON');
+  console.log('7. Run: pnpm exec tsx scripts/set-admin-id.ts YOUR_USER_ID\n');
 
   console.log('Option 2: Direct database setup (if you have access)');
   console.log('Run this SQL in your PostgreSQL database:');
-  console.log('UPDATE users SET role = \'ADMIN\' WHERE id = \'YOUR_USER_ID\';');
-  console.log('Then set NEXT_PUBLIC_ADMIN_ID=YOUR_USER_ID in .env.local\n');
+  console.log(`
+    -- Update user role to ADMIN
+    UPDATE users
+    SET role = 'ADMIN'
+    WHERE username = 'your_username';
 
-  console.log('Option 3: Environment variable only (for development)');
-  console.log('Set NEXT_PUBLIC_ADMIN_ID=your-user-id in .env.local');
+    -- Then set environment variable in .env.local:
+    NEXT_PUBLIC_ADMIN_ID=your_user_id_here
+  `);
+
+  console.log('Option 3: Quick development setup (UI only)');
+  console.log('Add to .env.local:');
+  console.log('NEXT_PUBLIC_ADMIN_ID=your-user-id-here');
   console.log('Note: This only restricts UI access, not API endpoints\n');
+
+  console.log('💡 How to find your user ID:');
+  console.log('- After registration/login, open browser dev tools');
+  console.log('- Go to Application → Local Storage → http://localhost:4000');
+  console.log('- Look for zustand key containing your user data');
+  console.log('- Or check network requests to /api/auth/me\n');
 
   // Check if .env.local exists
   try {
@@ -41,7 +59,6 @@ async function main() {
     try {
       envContent = readFileSync(envPath, 'utf8');
     } catch (err) {
-      // File doesn't exist, create from example
       try {
         envContent = readFileSync('.env.example', 'utf8');
       } catch (err2) {
@@ -53,8 +70,7 @@ async function main() {
     if (!envContent.includes('NEXT_PUBLIC_ADMIN_ID')) {
       console.log('\n📝 To complete setup:');
       console.log('1. Get your user ID from the database or after registration');
-      console.log('2. Add this line to .env.local:');
-      console.log('   NEXT_PUBLIC_ADMIN_ID=your-user-id-here');
+      console.log('2. Run: pnpm exec tsx scripts/set-admin-id.ts YOUR_USER_ID');
       console.log('3. Restart the dev server\n');
     } else {
       console.log('\n✅ NEXT_PUBLIC_ADMIN_ID already set in .env.local');
@@ -64,11 +80,11 @@ async function main() {
     console.error('Error reading .env files:', error);
   }
 
-  console.log('\n💡 To find your user ID:');
-  console.log('- After registration/login, open browser dev tools');
-  console.log('- Go to Application → Local Storage → http://localhost:4000');
-  console.log('- Look for zustand key containing your user data');
-  console.log('- Or check network requests to /api/auth/me\n');
+  console.log('\n🚀 Next steps after setup:');
+  console.log('1. Restart dev server: pnpm dev --port 4000');
+  console.log('2. Login with your admin account');
+  console.log('3. Visit: http://localhost:4000/admin/dashboard');
+  console.log('4. You should see the admin dashboard!\n');
 }
 
-main().catch(console.error);
+main();
