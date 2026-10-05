@@ -19,9 +19,9 @@ async function runSecurityTests() {
 
   // TEST 1: Engine Room Participant Membership
   console.log('Test Group 1: Room Membership Verification in Realtime Engine');
-  const userA: RealtimeUser = { id: 'user_alice', username: 'alice', displayName: 'Alice', avatar: '👩' };
-  const userB: RealtimeUser = { id: 'user_bob', username: 'bob', displayName: 'Bob', avatar: '👨' };
-  const userC: RealtimeUser = { id: 'user_eve', username: 'eve', displayName: 'Eve', avatar: '🦹' };
+  const userA: RealtimeUser = { id: 'user_alice', username: 'alice', displayName: 'Alice', avatar: '👩', interests: ['Tech'] };
+  const userB: RealtimeUser = { id: 'user_bob', username: 'bob', displayName: 'Bob', avatar: '👨', interests: ['Tech'] };
+  const userC: RealtimeUser = { id: 'user_eve', username: 'eve', displayName: 'Eve', avatar: '🦹', interests: ['Tech'] };
 
   // Match Alice and Bob into a room
   await realtimeEngine.addToQueue(userA);
@@ -45,7 +45,7 @@ async function runSecurityTests() {
 
   // TEST 2: Self-Block & Self-Report Prevention
   console.log('\nTest Group 2: Self-Block & Self-Report Protection');
-  const selfReport = safetyEngine.reportUser('user_alice', 'user_alice', 'Self report test');
+  const selfReport = await safetyEngine.reportUser('user_alice', 'user_alice', 'Self report test');
   assert(selfReport.status === 'DISMISSED' || !!(selfReport as any).error, 'Self-report is rejected or dismissed');
 
   // TEST 3: Rate Limiting & Toxic Content Sanitization
@@ -57,7 +57,7 @@ async function runSecurityTests() {
   assert(minorToxic.cleanText.includes('••••••••••') || minorToxic.moderation.hasContactExchange, 'Minor grooming/PII is detected/redacted');
 
   // Clean up room
-  realtimeEngine.leaveRoom(roomId, 'user_alice');
+  await realtimeEngine.leaveRoom(roomId, 'user_alice');
   assert(!realtimeEngine.getRoom(roomId), 'Room is cleanly archived and removed from active after leave');
 
   console.log(`\n========================================`);

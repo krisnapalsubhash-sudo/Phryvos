@@ -12,54 +12,29 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Role-based access control: only ADMIN or MODERATOR allowed to view moderation reports
+    const prisma = getPrismaClient();
+    const moderator = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true },
+    });
+
+    if (!moderator || (moderator.role !== 'ADMIN' && moderator.role !== 'MODERATOR')) {
+      return NextResponse.json({ error: 'Forbidden: Moderator privileges required' }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status') as ReportStatus | null;
     const severity = searchParams.get('severity') as ReportSeverity | null;
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    const parsedLimit = parseInt(searchParams.get('limit') || '50', 10);
+    const limit = Math.min(Math.max(isNaN(parsedLimit) ? 50 : parsedLimit, 1), 50);
 
-    // 1. Get from in-memory engine queue
-    let reports = safetyEngine.getReportsQueue({
+    // 1. Get from durable database backed engine queue
+    const reports = await safetyEngine.getReportsQueue({
       status: status || undefined,
       severity: severity || undefined,
       limit,
     });
-
-    // 2. Supplement from PostgreSQL Prisma if available
-    try {
-      const prisma = getPrismaClient();
-      if (prisma.report) {
-        const dbReports = await prisma.report.findMany({
-          take: limit,
-          orderBy: { createdAt: 'desc' },
-          include: {
-            reporter: { select: { id: true, username: true, displayName: true } },
-            reportedUser: { select: { id: true, username: true, displayName: true } },
-          },
-        });
-
-        if (dbReports && dbReports.length > 0) {
-          // Merge unique reports
-          const existingIds = new Set(reports.map((r) => r.id));
-          for (const dbr of dbReports) {
-            if (!existingIds.has(dbr.id)) {
-              reports.push({
-                id: dbr.id,
-                reporterId: dbr.reporterId,
-                reportedUserId: dbr.reportedId,
-                reason: dbr.description || dbr.reason,
-                category: dbr.reason,
-                severity: (dbr.severity as ReportSeverity) || 'MEDIUM',
-                status: (dbr.status as ReportStatus) || 'PENDING',
-                evidenceSnippet: dbr.evidence || undefined,
-                actionTaken: dbr.actionTaken || undefined,
-                moderatorNotes: dbr.moderatorNotes || undefined,
-                timestamp: dbr.createdAt.toISOString(),
-              });
-            }
-          }
-        }
-      }
-    } catch {}
 
     return NextResponse.json({
       success: true,
@@ -89,19 +64,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = safetyEngine.reportUser(reporterId, reportedUserId, reason, {
+    if (reportedUserId === reporterId) {
+      return NextResponse.json(
+        { error: 'Cannot report yourself' },
+        { status: 400 }
+      );
+    }
+
+    const result = await safetyEngine.reportUser(reporterId, reportedUserId, reason, {
       category,
       evidenceContext,
       isMinorInvolved,
     });
 
-    if ('error' in result) {
-      return NextResponse.json({ error: result.error }, { status: 429 });
+    if ('error' in result && result.error) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.category === 'RATE_LIMITED' ? 429 : 400 }
+      );
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Report submitted and queued for moderation review.',
+      message: 'Report submitted and recorded for moderation review.',
       incident: result,
     });
   } catch (err: any) {

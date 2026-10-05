@@ -329,7 +329,7 @@ export class PrivacyService {
       reasons: [],
     };
 
-    if (!prefsA?.enableInterestMatch && !prefsB?.enableInterestMatch) {
+    if (prefsA?.enableInterestMatch === false && prefsB?.enableInterestMatch === false) {
       return { ...defaultRes, score: 50 };
     }
 

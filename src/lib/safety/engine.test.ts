@@ -78,30 +78,30 @@ describe('SafetyEngine', () => {
   });
 
   describe('reportUser', () => {
-    it('creates a report incident', () => {
-      const incident = engine.reportUser('user-1', 'user-2', 'Harassment');
+    it('creates a report incident', async () => {
+      const incident = await engine.reportUser('user-1', 'user-2', 'Harassment');
       expect(incident.reporterId).toBe('user-1');
       expect(incident.reportedUserId).toBe('user-2');
       expect(incident.reason).toBe('Harassment');
     });
 
-    it('auto-blocks reported user from reporter', () => {
-      engine.reportUser('user-1', 'user-2', 'Harassment');
+    it('auto-blocks reported user from reporter', async () => {
+      await engine.reportUser('user-1', 'user-2', 'Harassment');
       expect(engine.isUserBlocked('user-1', 'user-2')).toBe(true);
     });
 
-    it('increments report count', () => {
-      engine.reportUser('user-1', 'user-2', 'Harassment');
-      engine.reportUser('user-3', 'user-2', 'Spam');
-      const reports = engine.getReports();
+    it('increments report count', async () => {
+      await engine.reportUser('user-1', 'user-2', 'Harassment');
+      await engine.reportUser('user-3', 'user-2', 'Spam');
+      const reports = await engine.getReports();
       expect(reports.length).toBe(2);
     });
 
-    it('flags user after 3 reports', () => {
-      engine.reportUser('user-1', 'user-2', 'Harassment');
-      engine.reportUser('user-3', 'user-2', 'Spam');
-      engine.reportUser('user-4', 'user-2', 'Abuse');
-      const reports = engine.getReports();
+    it('flags user after 3 reports', async () => {
+      await engine.reportUser('user-1', 'user-2', 'Harassment');
+      await engine.reportUser('user-3', 'user-2', 'Spam');
+      await engine.reportUser('user-4', 'user-2', 'Abuse');
+      const reports = await engine.getReports();
       expect(reports.length).toBe(3);
     });
   });

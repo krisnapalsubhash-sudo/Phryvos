@@ -561,7 +561,17 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        safetyEngine.blockUser(actingUserId, targetUserId);
+        const blockResult = await safetyEngine.blockUser(actingUserId, targetUserId);
+        const isCallerGuest = /^(anon|guest)[-_]/i.test(actingUserId);
+        const isTargetGuest = /^(anon|guest)[-_]/i.test(targetUserId);
+
+        // Audit #11: Propagate error if DB block write fails for registered accounts
+        if (!blockResult.success && !isCallerGuest && !isTargetGuest) {
+          return NextResponse.json(
+            { error: blockResult.error || 'Failed to block user in database', code: 'BLOCK_FAILED', requestId },
+            { status: 500 }
+          );
+        }
 
         if (roomId && realtimeEngine.isParticipant(roomId, actingUserId)) {
           await realtimeEngine.leaveRoom(roomId, actingUserId, 'blocked');
@@ -591,7 +601,8 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        const incident = safetyEngine.reportUser(
+        // Audit #12: Await reportUser with synchronous error propagation
+        const incident = await safetyEngine.reportUser(
           actingUserId,
           targetUserId,
           reason || 'Inappropriate behavior',
@@ -600,6 +611,13 @@ export async function POST(req: NextRequest) {
             evidenceContext,
           }
         );
+
+        if ('error' in incident && incident.status === 'DISMISSED' && incident.error) {
+          return NextResponse.json(
+            { error: incident.error, code: 'REPORT_REJECTED', requestId },
+            { status: incident.category === 'RATE_LIMITED' ? 429 : 400 }
+          );
+        }
 
         if (roomId && realtimeEngine.isParticipant(roomId, actingUserId)) {
           await realtimeEngine.leaveRoom(roomId, actingUserId, 'reported');

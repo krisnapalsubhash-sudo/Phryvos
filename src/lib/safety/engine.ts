@@ -155,22 +155,49 @@ export class SafetyEngine {
     };
   }
 
-  // Persistent Bidirectional Block
-  public blockUser(sourceUserId: string, targetUserId: string) {
-    if (!sourceUserId || !targetUserId || sourceUserId === targetUserId) return;
+  private normalizeReportReason(reason?: string, category?: string): 'SPAM' | 'HARASSMENT' | 'INAPPROPRIATE_CONTENT' | 'FAKE_PROFILE' | 'SCAM' | 'OTHER' {
+    const combined = `${category || ''} ${reason || ''}`.toUpperCase();
+    if (combined.includes('SPAM') || combined.includes('BOT')) return 'SPAM';
+    if (combined.includes('HARASS') || combined.includes('BULLY') || combined.includes('THREAT') || combined.includes('HATE')) return 'HARASSMENT';
+    if (combined.includes('INAPPROPRIATE') || combined.includes('NUDE') || combined.includes('NSFW') || combined.includes('CSAM') || combined.includes('CHILD')) return 'INAPPROPRIATE_CONTENT';
+    if (combined.includes('FAKE') || combined.includes('IMPERSONAT')) return 'FAKE_PROFILE';
+    if (combined.includes('SCAM') || combined.includes('PHISH') || combined.includes('FRAUD')) return 'SCAM';
+    return 'OTHER';
+  }
+
+  // Persistent Bidirectional Block (Audit #11: reliable persistence, no hidden errors)
+  public async blockUser(sourceUserId: string, targetUserId: string): Promise<{ success: boolean; error?: string }> {
+    if (!sourceUserId || !targetUserId || sourceUserId === targetUserId) {
+      return { success: false, error: 'Cannot block invalid user' };
+    }
     const record = this.getSafetyRecord(sourceUserId);
     record.blockedUserIds.add(targetUserId);
 
-    // Persistent storage via Privacy Service
-    privacyService.blockUser(sourceUserId, targetUserId).catch(() => {});
+    const isCallerGuest = /^(anon|guest)[-_]/i.test(sourceUserId);
+    const isTargetGuest = /^(anon|guest)[-_]/i.test(targetUserId);
+
+    if (isCallerGuest || isTargetGuest) {
+      return { success: true };
+    }
+
+    try {
+      const persisted = await privacyService.blockUser(sourceUserId, targetUserId);
+      if (!persisted) {
+        return { success: false, error: 'Database block persistence failed' };
+      }
+      return { success: true };
+    } catch (err: any) {
+      console.error('SafetyEngine blockUser DB error:', err);
+      return { success: false, error: err?.message || 'Database block error' };
+    }
   }
 
   public isUserBlocked(sourceUserId: string, targetUserId: string): boolean {
     return privacyService.isBlockedSync(sourceUserId, targetUserId);
   }
 
-  // Report user with anti-abuse validation & evidence preservation
-  public reportUser(
+  // Report user with anti-abuse validation & awaited persistence (Audit #10 & #12)
+  public async reportUser(
     reporterId: string,
     reportedUserId: string,
     reason: string,
@@ -179,7 +206,7 @@ export class SafetyEngine {
       evidenceContext?: string;
       isMinorInvolved?: boolean;
     }
-  ): ModerationIncident & { error?: string } {
+  ): Promise<ModerationIncident & { error?: string }> {
     const now = Date.now();
 
     // 0. Prevent Self-Report
@@ -200,7 +227,6 @@ export class SafetyEngine {
 
     // 1. Anti-Abuse / Malicious Reporting Filter
     let reporterHistory = this.recentReportsByReporter.get(reporterId) || [];
-    // Keep only last 1 hour
     reporterHistory = reporterHistory.filter((r) => now - r.timestamp < 3600000);
 
     // Check duplicate report on same user within 15 minutes
@@ -208,8 +234,7 @@ export class SafetyEngine {
       (r) => r.targetId === reportedUserId && now - r.timestamp < 900000
     );
     if (duplicate) {
-      // Auto-block anyway for reporter's peace of mind, but don't spam queue
-      this.blockUser(reporterId, reportedUserId);
+      await this.blockUser(reporterId, reportedUserId);
       return {
         id: `dup-${now}`,
         reporterId,
@@ -267,8 +292,50 @@ export class SafetyEngine {
       severity = 'LOW';
     }
 
+    // Auto-block reported user from reporter's orbit
+    await this.blockUser(reporterId, reportedUserId);
+
+    let dbReportId: string | undefined;
+    const isCallerGuest = /^(anon|guest)[-_]/i.test(reporterId);
+    const isTargetGuest = /^(anon|guest)[-_]/i.test(reportedUserId);
+
+    // 3. Awaited Persistence to PostgreSQL Report model for registered users (Audit #12)
+    if (!isCallerGuest && !isTargetGuest) {
+      try {
+        const prisma = getPrismaClient();
+        if (prisma.report) {
+          const reportReason = this.normalizeReportReason(reason, options?.category);
+          const dbReport = await prisma.report.create({
+            data: {
+              reporterId,
+              reportedId: reportedUserId,
+              reason: reportReason,
+              description: reason,
+              status: 'PENDING',
+              severity,
+              evidence: options?.evidenceContext || null,
+            },
+          });
+          dbReportId = dbReport.id;
+        }
+      } catch (err: any) {
+        console.error('SafetyEngine reportUser DB persistence error:', err);
+        return {
+          id: `err-${now}`,
+          reporterId,
+          reportedUserId,
+          reason,
+          category: options?.category || 'GENERAL_SAFETY',
+          severity,
+          status: 'DISMISSED',
+          timestamp: new Date().toISOString(),
+          error: 'Failed to record report in safety database.',
+        };
+      }
+    }
+
     const incident: ModerationIncident = {
-      id: `rep-${now}-${Math.random().toString(36).substring(2, 6)}`,
+      id: dbReportId || `rep-${now}-${Math.random().toString(36).substring(2, 6)}`,
       reporterId,
       reportedUserId,
       reason,
@@ -279,7 +346,6 @@ export class SafetyEngine {
       timestamp: new Date().toISOString(),
     };
 
-    // 3. Add to Moderation Queue (no blind auto-ban without human review)
     this.reportsQueue.push(incident);
 
     // 4. Critical Escalation: Freeze chronic or severe predatory threats temporarily
@@ -287,99 +353,212 @@ export class SafetyEngine {
     targetRecord.reportsReceivedCount += 1;
 
     if (severity === 'CRITICAL_IMMINENT_HARM') {
-      // Freeze for 1 hour pending moderator review
       targetRecord.isTemporarilyFrozen = true;
       targetRecord.frozenUntil = now + 3600000;
-    }
 
-    // 5. Auto-block reported stranger from reporter's orbit
-    this.blockUser(reporterId, reportedUserId);
-
-    // 6. Asynchronously persist to Prisma Report model
-    try {
-      const prisma = getPrismaClient();
-      if (prisma.report) {
-        prisma.report
-          .create({
+      if (!isTargetGuest) {
+        try {
+          const prisma = getPrismaClient();
+          await prisma.user.update({
+            where: { id: reportedUserId },
             data: {
-              reporterId,
-              reportedId: reportedUserId,
-              reason: (incident.severity === 'CRITICAL_IMMINENT_HARM' ? 'HARASSMENT' : 'INAPPROPRIATE_CONTENT') as any,
-              description: incident.reason,
-              status: incident.status,
-              severity: incident.severity,
-              evidence: incident.evidenceSnippet || null,
+              isSuspended: true,
+              suspendedUntil: new Date(now + 3600000),
             },
-          })
-          .catch((err) => {
-            console.warn('Prisma report insert deferred:', (err as any)?.message);
           });
+        } catch {}
       }
-    } catch {}
+    }
 
     return incident;
   }
 
-  // Get reports queue for admin panel with filtering
-  public getReportsQueue(filter?: {
+  // Get reports queue backed by database as single source of truth (Audit #10)
+  public async getReportsQueue(filter?: {
     status?: ReportStatus;
     severity?: ReportSeverity;
     limit?: number;
-  }): ModerationIncident[] {
-    let list = [...this.reportsQueue];
-    if (filter?.status) {
-      list = list.filter((r) => r.status === filter.status);
+  }): Promise<ModerationIncident[]> {
+    const limit = filter?.limit || 50;
+    const reports: ModerationIncident[] = [];
+
+    try {
+      const prisma = getPrismaClient();
+      if (prisma.report) {
+        const dbReports = await prisma.report.findMany({
+          where: {
+            status: filter?.status ? filter.status : undefined,
+            severity: filter?.severity ? filter.severity : undefined,
+          },
+          take: limit,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          include: {
+            reporter: { select: { id: true, username: true, displayName: true } },
+            reportedUser: { select: { id: true, username: true, displayName: true } },
+          },
+        });
+
+        for (const dbr of dbReports) {
+          reports.push({
+            id: dbr.id,
+            reporterId: dbr.reporterId,
+            reportedUserId: dbr.reportedId,
+            reason: dbr.description || dbr.reason,
+            category: dbr.reason,
+            severity: (dbr.severity as ReportSeverity) || 'MEDIUM',
+            status: (dbr.status as ReportStatus) || 'PENDING',
+            evidenceSnippet: dbr.evidence || undefined,
+            actionTaken: dbr.actionTaken || undefined,
+            moderatorNotes: dbr.moderatorNotes || undefined,
+            timestamp: dbr.createdAt.toISOString(),
+          });
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Database reports queue query deferred:', (dbErr as any)?.message);
     }
-    if (filter?.severity) {
-      list = list.filter((r) => r.severity === filter.severity);
+
+    // Merge in-memory queue for any pending incidents not in DB
+    const existingIds = new Set(reports.map((r) => r.id));
+    for (const memIncident of this.reportsQueue) {
+      if (!existingIds.has(memIncident.id)) {
+        if (filter?.status && memIncident.status !== filter.status) continue;
+        if (filter?.severity && memIncident.severity !== filter.severity) continue;
+        reports.push(memIncident);
+      }
     }
-    list.sort((a, b) => {
-      // Prioritize CRITICAL severity first
-      const sevOrder: Record<ReportSeverity, number> = {
-        CRITICAL_IMMINENT_HARM: 4,
-        HIGH: 3,
-        MEDIUM: 2,
-        LOW: 1,
-      };
-      return sevOrder[b.severity] - sevOrder[a.severity];
-    });
-    return list.slice(0, filter?.limit || 50);
+
+    return reports.slice(0, limit);
   }
 
-  // Backwards compatible alias for getReportsQueue
-  public getReports(): ModerationIncident[] {
+  public async getReports(): Promise<ModerationIncident[]> {
     return this.getReportsQueue();
   }
 
-  // Moderator actions on report
-  public takeModeratorAction(
+  // Moderator actions on report with durable DB transactions (Audit #10)
+  public async takeModeratorAction(
     reportId: string,
     action: 'WARNING_ISSUED' | 'TEMPORARY_SUSPENSION' | 'PERMANENT_BAN' | 'DISMISSED',
     moderatorNotes: string,
     moderatorId: string
-  ): { success: boolean; incident?: ModerationIncident } {
-    const incident = this.reportsQueue.find((r) => r.id === reportId);
-    if (!incident) return { success: false };
+  ): Promise<{ success: boolean; incident?: ModerationIncident; error?: string }> {
+    const prisma = getPrismaClient();
+    let dbReport: any = null;
 
-    incident.status = action === 'DISMISSED' ? 'DISMISSED' : 'RESOLVED';
-    incident.actionTaken = action;
-    incident.moderatorNotes = moderatorNotes;
+    try {
+      if (prisma.report) {
+        dbReport = await prisma.report.findUnique({
+          where: { id: reportId },
+        });
+      }
+    } catch {}
 
-    const targetRecord = this.getSafetyRecord(incident.reportedUserId);
-
-    if (action === 'WARNING_ISSUED') {
-      targetRecord.warnings.push(`Warning issued on ${new Date().toISOString()}: ${moderatorNotes}`);
-    } else if (action === 'TEMPORARY_SUSPENSION') {
-      targetRecord.isTemporarilyFrozen = true;
-      targetRecord.frozenUntil = Date.now() + 7 * 86400000; // 7 days
-    } else if (action === 'PERMANENT_BAN') {
-      targetRecord.isTemporarilyFrozen = true;
-      targetRecord.frozenUntil = Date.now() + 365 * 86400000 * 10;
-    } else if (action === 'DISMISSED') {
-      // Unfreeze if was previously frozen pending review
-      targetRecord.isTemporarilyFrozen = false;
-      targetRecord.frozenUntil = undefined;
+    const memIncident = this.reportsQueue.find((r) => r.id === reportId);
+    if (!dbReport && !memIncident) {
+      return { success: false, error: 'Report not found in database or active queue' };
     }
+
+    const reportedUserId = dbReport?.reportedId || memIncident?.reportedUserId;
+
+    // 1. Transactionally update DB
+    try {
+      if (prisma.report && dbReport) {
+        await prisma.$transaction(async (tx) => {
+          await tx.report.update({
+            where: { id: reportId },
+            data: {
+              status: action === 'DISMISSED' ? 'DISMISSED' : 'RESOLVED',
+              actionTaken: action,
+              moderatorNotes,
+              resolvedAt: new Date(),
+            },
+          });
+
+          if (reportedUserId) {
+            if (action === 'PERMANENT_BAN') {
+              await tx.user.update({
+                where: { id: reportedUserId },
+                data: {
+                  isBanned: true,
+                  banReason: moderatorNotes || 'Banned by moderator',
+                },
+              });
+              await tx.session.deleteMany({ where: { userId: reportedUserId } });
+            } else if (action === 'TEMPORARY_SUSPENSION') {
+              const suspendedUntil = new Date(Date.now() + 7 * 86400000);
+              await tx.user.update({
+                where: { id: reportedUserId },
+                data: {
+                  isSuspended: true,
+                  suspendedUntil,
+                },
+              });
+              await tx.session.deleteMany({ where: { userId: reportedUserId } });
+            } else if (action === 'DISMISSED') {
+              await tx.user.update({
+                where: { id: reportedUserId },
+                data: {
+                  isSuspended: false,
+                  suspendedUntil: null,
+                },
+              });
+            }
+          }
+
+          if (tx.moderationAuditLog) {
+            await tx.moderationAuditLog.create({
+              data: {
+                moderatorId,
+                action,
+                targetUserId: reportedUserId || null,
+                reportId,
+                details: JSON.stringify({ moderatorNotes, timestamp: new Date().toISOString() }),
+              },
+            });
+          }
+        });
+      }
+    } catch (err: any) {
+      console.error('Moderation action persistence failed:', err);
+      return { success: false, error: 'Failed to persist moderation action in database' };
+    }
+
+    // 2. Update in-memory state
+    if (memIncident) {
+      memIncident.status = action === 'DISMISSED' ? 'DISMISSED' : 'RESOLVED';
+      memIncident.actionTaken = action;
+      memIncident.moderatorNotes = moderatorNotes;
+    }
+
+    if (reportedUserId) {
+      const targetRecord = this.getSafetyRecord(reportedUserId);
+      if (action === 'WARNING_ISSUED') {
+        targetRecord.warnings.push(`Warning issued on ${new Date().toISOString()}: ${moderatorNotes}`);
+      } else if (action === 'TEMPORARY_SUSPENSION') {
+        targetRecord.isTemporarilyFrozen = true;
+        targetRecord.frozenUntil = Date.now() + 7 * 86400000;
+      } else if (action === 'PERMANENT_BAN') {
+        targetRecord.isTemporarilyFrozen = true;
+        targetRecord.frozenUntil = Date.now() + 365 * 86400000 * 10;
+      } else if (action === 'DISMISSED') {
+        targetRecord.isTemporarilyFrozen = false;
+        targetRecord.frozenUntil = undefined;
+      }
+    }
+
+    const incident: ModerationIncident = memIncident || {
+      id: reportId,
+      reporterId: dbReport.reporterId,
+      reportedUserId,
+      reason: dbReport.description || dbReport.reason,
+      category: dbReport.reason,
+      severity: dbReport.severity,
+      status: action === 'DISMISSED' ? 'DISMISSED' : 'RESOLVED',
+      evidenceSnippet: dbReport.evidence || undefined,
+      actionTaken: action,
+      moderatorNotes,
+      timestamp: dbReport.createdAt.toISOString(),
+    };
 
     return { success: true, incident };
   }

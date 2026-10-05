@@ -12,6 +12,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Moderator access required' }, { status: 401 });
     }
 
+    // Role-based access control: only ADMIN or MODERATOR allowed
+    const prisma = getPrismaClient();
+    const moderator = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { role: true },
+    });
+
+    if (!moderator || (moderator.role !== 'ADMIN' && moderator.role !== 'MODERATOR')) {
+      return NextResponse.json({ error: 'Forbidden: Moderator privileges required' }, { status: 403 });
+    }
+
     const body = await req.json();
     const { reportId, action, moderatorNotes } = body;
     const moderatorId = session.user.id;
@@ -25,8 +36,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid action type' }, { status: 400 });
     }
 
-    // 1. Take action in safety engine
-    const result = safetyEngine.takeModeratorAction(
+    // 1. Take action in safety engine with durable DB transaction
+    const result = await safetyEngine.takeModeratorAction(
       reportId,
       action as any,
       moderatorNotes || 'Standard moderation procedure applied',
@@ -34,41 +45,10 @@ export async function POST(req: NextRequest) {
     );
 
     if (!result.success) {
-      return NextResponse.json({ error: 'Report not found in active moderation queue' }, { status: 404 });
-    }
-
-    // 2. Persist audit log & database status update
-    try {
-      const prisma = getPrismaClient();
-      if (prisma.moderationAuditLog) {
-        await prisma.moderationAuditLog.create({
-          data: {
-            moderatorId,
-            action,
-            targetUserId: result.incident?.reportedUserId || null,
-            reportId,
-            details: JSON.stringify({
-              moderatorNotes,
-              timestamp: new Date().toISOString(),
-            }),
-          },
-        });
-      }
-
-      // Update Report row if exists
-      if (prisma.report) {
-        await prisma.report.updateMany({
-          where: { id: reportId },
-          data: {
-            status: action === 'DISMISSED' ? 'DISMISSED' : 'RESOLVED',
-            actionTaken: action,
-            moderatorNotes,
-            resolvedAt: new Date(),
-          },
-        });
-      }
-    } catch (dbErr) {
-      console.warn('Database audit log deferred:', (dbErr as any)?.message);
+      return NextResponse.json(
+        { error: result.error || 'Report not found in database or moderation queue' },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({
