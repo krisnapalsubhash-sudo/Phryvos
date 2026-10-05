@@ -23,17 +23,22 @@ function createAuthConfig() {
           token.email = user.email;
           token.name = user.name;
           token.image = user.image;
+          token.username = (user as any).username;
           token.demoMode = user.demoMode || false;
         }
         if (trigger === 'update' && session) {
           token.name = session.name;
           token.image = session.image;
+          if (session.username) {
+            token.username = session.username;
+          }
         }
         return token;
       },
       async session({ session, token }: any) {
         if (session.user) {
           session.user.id = token.id as string;
+          session.user.username = token.username as string;
           session.user.email = token.email as string;
           session.user.name = token.name as string;
           session.user.image = token.image as string;
@@ -62,6 +67,7 @@ function createAuthConfig() {
               id: 'build-mock-user',
               email: credentials?.email as string || 'build@test.com',
               name: 'Build User',
+              username: 'build_user',
               image: '😊',
               demoMode: false,
             };
@@ -116,6 +122,7 @@ function createAuthConfig() {
               id: demoUser.id,
               email: demoUser.email,
               name: demoUser.displayName,
+              username: demoUser.username,
               image: demoUser.avatar,
               demoMode: true,
             };
@@ -174,6 +181,7 @@ function createAuthConfig() {
             id: user.id,
             email: user.email,
             name: user.displayName,
+            username: user.username,
             image: user.avatar,
             demoMode: user.demoMode,
           };
@@ -197,17 +205,5 @@ function createAuthConfig() {
 
 const config = createAuthConfig();
 const { handlers, auth, signIn, signOut } = NextAuth(config);
-
-declare module 'next-auth' {
-  interface Session {
-    user: {
-      id: string;
-      email: string;
-      name: string;
-      image: string;
-      demoMode?: boolean;
-    };
-  }
-}
 
 export { handlers, auth, signIn, signOut };

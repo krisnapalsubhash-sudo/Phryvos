@@ -13,9 +13,9 @@ export function useAuth() {
   // Canonical user derived from real server session + store profile extensions
   const user = session?.user
     ? {
-        id: session.user.id || (session.user as any).sub || 'me',
-        username: (session.user as any).username || session.user.name || 'User',
-        displayName: session.user.name || (session.user as any).username || 'User',
+        id: session.user.id || (session.user as any).sub || '',
+        username: session.user.username || '',
+        displayName: session.user.name || session.user.username || 'User',
         email: session.user.email || undefined,
         avatar: session.user.image || storeUser?.avatar || '😊',
         bio: storeUser?.bio || '',
