@@ -34,42 +34,26 @@ export async function DELETE(
       return NextResponse.json({ error: 'Not following this user' }, { status: 404 });
     }
 
-    // Delete bidirectional connection in a transaction
-    await prisma.$transaction([
-      // Current user unfollows target
-      prisma.connection.delete({
+    // Delete only the directed connection in a transaction
+    await prisma.$transaction(async (tx: any) => {
+      await tx.connection.delete({
         where: {
           userId_connectedUserId: {
             userId: session.user.id,
             connectedUserId: targetUserId,
           },
         },
-      }),
-      // Target user unfollows current user (mutual connection)
-      prisma.connection.delete({
-        where: {
-          userId_connectedUserId: {
-            userId: targetUserId,
-            connectedUserId: session.user.id,
-          },
-        },
-      }),
-      // Decrement counters
-      prisma.user.update({
+      });
+      // Decrement only the actor's following count and the target's followers count
+      await tx.user.update({
         where: { id: session.user.id },
-        data: {
-          following: { decrement: 1 },
-          followers: { decrement: 1 },
-        },
-      }),
-      prisma.user.update({
+        data: { following: { decrement: 1 } },
+      });
+      await tx.user.update({
         where: { id: targetUserId },
-        data: {
-          following: { decrement: 1 },
-          followers: { decrement: 1 },
-        },
-      }),
-    ]);
+        data: { followers: { decrement: 1 } },
+      });
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
@@ -80,10 +64,7 @@ export async function DELETE(
         { status: 404 }
       );
     }
-    console.error('Unfollow user error:', error);
-    return NextResponse.json(
-      { error: 'Failed to unfollow user' },
-      { status: 500 }
-    );
+    // Roll back partial transaction — rethrow for top-level catch
+    throw error;
   }
 }

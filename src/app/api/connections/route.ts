@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      connections: connections.map((c) => ({
+      connections: connections.map((c: any) => ({
         id: c.id,
         user: c.connectedUser,
         connectedAt: c.connectedAt.toISOString(),
@@ -131,38 +131,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Cannot follow this user' }, { status: 403 });
     }
 
-    // Create bidirectional connection in a transaction
-    await prisma.$transaction([
-      // Current user follows target
-      prisma.connection.create({
+    // Create directed connection in a transaction
+    await prisma.$transaction(async (tx: any) => {
+      await tx.connection.create({
         data: {
           userId: session.user.id,
           connectedUserId: targetUserId,
         },
-      }),
-      // Target user follows current user (mutual connection)
-      prisma.connection.create({
-        data: {
-          userId: targetUserId,
-          connectedUserId: session.user.id,
-        },
-      }),
-      // Increment counters
-      prisma.user.update({
+      });
+      // Increment only the actor's following count and the target's followers count
+      await tx.user.update({
         where: { id: session.user.id },
-        data: {
-          following: { increment: 1 },
-          followers: { increment: 1 },
-        },
-      }),
-      prisma.user.update({
+        data: { following: { increment: 1 } },
+      });
+      await tx.user.update({
         where: { id: targetUserId },
-        data: {
-          following: { increment: 1 },
-          followers: { increment: 1 },
-        },
-      }),
-    ]);
+        data: { followers: { increment: 1 } },
+      });
+    });
 
     return NextResponse.json({ success: true, connected: true });
   } catch (error: any) {
@@ -174,10 +160,7 @@ export async function POST(request: NextRequest) {
         connected: true,
       });
     }
-    console.error('Follow user error:', error);
-    return NextResponse.json(
-      { error: 'Failed to follow user' },
-      { status: 500 }
-    );
+    // Roll back partial transaction — rethrow for top-level catch
+    throw error;
   }
 }

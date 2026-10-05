@@ -167,7 +167,13 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
   // States
   const [activeTab, setActiveTab] = useState<'posts' | 'grid' | 'audio' | 'saved'>('posts');
   const [isFollowing, setIsFollowing] = useState(resolvedUser.isConnected || false);
-  const [followersCount, setFollowersCount] = useState(resolvedUser.followers || 428);
+  const [followersCount, setFollowersCount] = useState(resolvedUser.followers || 0);
+
+  useEffect(() => {
+    setIsFollowing(resolvedUser.isConnected || false);
+    setFollowersCount(resolvedUser.followers || 0);
+  }, [resolvedUser.isConnected, resolvedUser.followers]);
+
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isFollowersModalOpen, setIsFollowersModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -186,16 +192,37 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
   const userAudioPosts = userPosts.filter((p) => p.format === 'voice');
   const userSavedPosts = posts.filter((p) => p.isSaved || p.isLiked);
 
-  const handleToggleFollow = () => {
+  const handleToggleFollow = async () => {
+    if (!resolvedUser.id) return;
     const next = !isFollowing;
+    // Optimistic update
     setIsFollowing(next);
-    setFollowersCount((prev) => (next ? prev + 1 : prev - 1));
+    setFollowersCount((prev) => (next ? prev + 1 : Math.max(0, prev - 1)));
     if (next) {
       sound.playHeart();
-      toast.success(`You are now following @${resolvedUser.username}! ✨`);
     } else {
       sound.playPop(320);
-      toast.info(`Unfollowed @${resolvedUser.username}`);
+    }
+    try {
+      if (next) {
+        const res = await fetch('/api/connections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ targetUserId: resolvedUser.id }),
+        });
+        if (!res.ok) throw new Error('Failed to follow');
+        toast.success(`You are now following @${resolvedUser.username}! ✨`);
+      } else {
+        const res = await fetch(`/api/connections/${resolvedUser.id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to unfollow');
+        toast.info(`Unfollowed @${resolvedUser.username}`);
+      }
+    } catch {
+      // Rollback on failure
+      setIsFollowing(!next);
+      setFollowersCount((prev) => (!next ? prev + 1 : Math.max(0, prev - 1)));
+      toast.error(next ? 'Failed to follow user' : 'Failed to unfollow user');
     }
   };
 
@@ -431,7 +458,7 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
             <div className="flex items-center gap-6 border-t border-border/60 mt-4 pt-3.5">
               <div>
                 <span className="font-extrabold text-sm sm:text-base text-foreground">
-                  {formatNumber(userPosts.length || resolvedUser.postsCount || 12)}
+                  {formatNumber(userPosts.length || resolvedUser.postsCount || 0)}
                 </span>
                 <span className="text-xs text-muted-foreground ml-1.5">Posts</span>
               </div>
@@ -451,7 +478,7 @@ export function ProfileView({ userId = 'me' }: ProfileViewProps) {
                 className="hover:opacity-80 transition-opacity text-left"
               >
                 <span className="font-extrabold text-sm sm:text-base text-foreground">
-                  {formatNumber(resolvedUser.following || 280)}
+                  {formatNumber(resolvedUser.following || 0)}
                 </span>
                 <span className="text-xs text-muted-foreground ml-1.5 hover:underline">Following</span>
               </button>
