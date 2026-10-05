@@ -2,6 +2,7 @@
   "name": "phryvos",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "next dev --port 4000",
     "build": "prisma generate && next build",
@@ -70,5 +71,13 @@
     "lightningcss": "1.33.0",
     "typescript": "5.9.3",
     "vitest": "^2.1.9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "bcryptjs"
+    ]
   }
 }

@@ -110,9 +110,8 @@ model Post {
   shares           Int        @default(0)
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
-
-  likes            Like[]     @relation("SentMessages")
-  likes    Like[]
+  likes            Like[]
+  comments         Comment[]
 
   @@index([createdAt])
   @@index([authorId, createdAt])
