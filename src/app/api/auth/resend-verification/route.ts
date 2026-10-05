@@ -37,6 +37,7 @@ export async function POST(request: NextRequest) {
 
     // Generate new verification token
     const verificationToken = crypto.randomUUID();
+    const hashedToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await prisma.verificationToken.deleteMany({
@@ -49,13 +50,13 @@ export async function POST(request: NextRequest) {
     await prisma.verificationToken.create({
       data: {
         identifier: session.user.email,
-        token: verificationToken,
+        token: hashedToken,
         expires: expiresAt,
       },
     });
 
-    // TODO: Send verification email
-    console.log(`Verification token for ${session.user.email}: ${verificationToken}`);
+    // TODO: Send verification email with verificationToken in URL query
+    // await sendVerificationEmail(session.user.email, verificationToken);
 
     return NextResponse.json({
       success: true,

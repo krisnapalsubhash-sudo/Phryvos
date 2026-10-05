@@ -17,10 +17,18 @@ export async function POST(request: NextRequest) {
     const { token } = validation.data;
     const prisma = getPrismaClient();
 
-    // Find verification token
-    const verificationToken = await prisma.verificationToken.findUnique({
-      where: { token },
+    // Look up token by SHA-256 hash (with legacy plain fallback)
+    const crypto = await import('crypto');
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    let verificationToken = await prisma.verificationToken.findUnique({
+      where: { token: hashedToken },
     });
+
+    if (!verificationToken) {
+      verificationToken = await prisma.verificationToken.findUnique({
+        where: { token },
+      });
+    }
 
     if (!verificationToken || verificationToken.expires < new Date()) {
       return NextResponse.json(

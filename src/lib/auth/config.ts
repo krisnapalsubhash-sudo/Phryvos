@@ -116,8 +116,25 @@ function createAuthConfig() {
             throw new Error('Invalid credentials');
           }
 
-          // NOTE: email verification gate removed — verification emails not yet implemented.
-          // Re-enable once email sending is configured.
+          // Enforcement of ban and suspension policy
+          if (user.isBanned) {
+            throw new Error(user.banReason ? `Account is banned: ${user.banReason}` : 'Account is permanently banned');
+          }
+
+          if (user.isSuspended) {
+            if (user.suspendedUntil && user.suspendedUntil > new Date()) {
+              throw new Error(`Account suspended until ${user.suspendedUntil.toISOString()}`);
+            } else if (!user.suspendedUntil) {
+              throw new Error('Account is suspended');
+            } else {
+              // Expired suspension: automatically clear
+              await prisma.user.update({
+                where: { id: user.id },
+                data: { isSuspended: false, suspendedUntil: null },
+              });
+            }
+          }
+
 
           return {
             id: user.id,

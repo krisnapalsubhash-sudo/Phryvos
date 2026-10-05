@@ -3,10 +3,20 @@ import { getPrismaClient } from '@/lib/db/prisma';
 import bcrypt from 'bcryptjs';
 import { registerSchema } from '@/lib/auth/validation';
 import { auth } from '@/lib/auth/config';
+import { safetyEngine } from '@/lib/safety/engine';
 import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || '127.0.0.1';
+    const rateLimit = safetyEngine.checkRateLimit(`register:${ip}`, undefined, ip);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many registration attempts. Please slow down and try again later.' },
+        { status: 429 }
+      );
+    }
+
     const session = await auth();
     if (session?.user) {
       return NextResponse.json({ error: 'Already authenticated' }, { status: 400 });
@@ -57,12 +67,13 @@ export async function POST(request: NextRequest) {
 
     // Generate email verification token
     const verificationToken = crypto.randomUUID();
+    const hashedToken = crypto.createHash('sha256').update(verificationToken).digest('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     await prisma.verificationToken.create({
       data: {
         identifier: email,
-        token: verificationToken,
+        token: hashedToken,
         expires: expiresAt,
       },
     });
