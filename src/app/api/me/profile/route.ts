@@ -22,16 +22,6 @@ const USER_PUBLIC_FIELDS = {
   createdAt: true,
 };
 
-const USER_PRIVATE_FIELDS = {
-  ...USER_PUBLIC_FIELDS,
-  email: true,
-  emailVerified: true,
-  role: true,
-  ageGroup: true,
-  onboardingCompleted: true,
-  demoMode: true,
-};
-
 export async function GET() {
   try {
     const session = await auth();
@@ -41,7 +31,7 @@ export async function GET() {
 
     const user = await prisma.user.findUnique({
       where: { id: session.user.id },
-      select: USER_PRIVATE_FIELDS,
+      select: USER_PUBLIC_FIELDS,
     });
 
     if (!user) {
@@ -54,7 +44,6 @@ export async function GET() {
         ...user,
         createdAt: user.createdAt.toISOString(),
         lastSeen: user.lastSeen?.toISOString() || null,
-        emailVerified: user.emailVerified?.toISOString() || null,
       },
     });
   } catch (error) {
@@ -83,7 +72,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const { displayName, bio, location, avatar, cover, interests, website } = validation.data;
+    const { displayName, bio, location, avatar, cover, interests } = validation.data;
 
     // Check username uniqueness if displayName is being used as username
     // (We don't allow username changes here - that's a separate flow)

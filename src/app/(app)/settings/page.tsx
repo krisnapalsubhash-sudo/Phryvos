@@ -37,13 +37,15 @@ import { Input } from '@/components/ui/input';
 export default function SettingsPage() {
   const { setTheme: setNextTheme } = useTheme();
   const { theme, setTheme: setStoreTheme } = useThemeStore();
-  const { user, updateProfile } = useAuthStore();
+  const { user, updateProfileAPI, fetchProfile } = useAuthStore();
   const { logout } = useAuth();
   const { flags, toggleFlag, setMinimalistMode, applyPreset, resetToDefaults } = useFeaturesStore();
 
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [presetNotice, setPresetNotice] = useState<string | null>(null);
 
   const handleSelectTheme = (t: 'light' | 'dark' | 'system') => {
@@ -52,11 +54,20 @@ export default function SettingsPage() {
     sound.playPop(420);
   };
 
-  const handleSave = () => {
-    updateProfile({ displayName, bio });
-    setSaved(true);
-    sound.playMessageSent();
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await updateProfileAPI({ displayName, bio });
+      await fetchProfile();
+      setSaved(true);
+      sound.playMessageSent();
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Failed to save');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleToggleMinimalist = () => {

@@ -254,7 +254,6 @@ export const updateProfileSchema = z.object({
   avatar: z.string().max(255).optional(),
   cover: z.string().max(255).optional(),
   interests: z.array(z.string().max(30)).max(8).optional(),
-  website: z.string().url('Invalid URL').max(200).optional().nullable(),
 });
 
 // Search users schema

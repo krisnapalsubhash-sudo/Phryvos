@@ -9,7 +9,6 @@ import {
   Save,
   Sparkles,
   MapPin,
-  Link as LinkIcon,
   Smile,
   Palette
 } from 'lucide-react';
@@ -38,30 +37,42 @@ const BANNER_THEMES = [
 ];
 
 export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
-  const { user, updateProfile } = useAuthStore();
+  const { user, updateProfileAPI, fetchProfile } = useAuthStore();
 
   const [displayName, setDisplayName] = useState(user?.displayName || 'You');
   const [bio, setBio] = useState(user?.bio || '');
   const [location, setLocation] = useState(user?.location || '');
-  const [website, setWebsite] = useState('https://phryvos.in');
   const [avatar, setAvatar] = useState(user?.avatar || '😊');
   const [selectedBanner, setSelectedBanner] = useState(BANNER_THEMES[0].class);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!displayName.trim()) return;
 
-    updateProfile({
-      displayName: displayName.trim(),
-      bio: bio.trim(),
-      location: location.trim(),
-      avatar,
-      cover: selectedBanner,
-    });
+    setIsSaving(true);
+    setSaveError(null);
 
-    sound.playMessageSent();
-    toast.success('Profile updated successfully! ✨');
-    onClose();
+    try {
+      await updateProfileAPI({
+        displayName: displayName.trim(),
+        bio: bio.trim(),
+        location: location.trim(),
+        avatar,
+        cover: selectedBanner,
+      });
+      await fetchProfile();
+      sound.playMessageSent();
+      toast.success('Profile updated successfully! ✨');
+      onClose();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Failed to update profile';
+      setSaveError(msg);
+      console.error('Profile update failed:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -90,7 +101,7 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
           </div>
 
           {/* Form Scroll Area */}
-          <form onSubmit={handleSave} className="space-y-4 overflow-y-auto pr-1 flex-1">
+          <form id="profile-edit-form" onSubmit={handleSave} className="space-y-4 overflow-y-auto pr-1 flex-1">
             {/* Banner Preview & Theme Selector */}
             <div>
               <label className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
@@ -181,49 +192,42 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
               />
             </div>
 
-            {/* Location & Website */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1">
-                  <MapPin className="w-3 h-3 text-muted-foreground" />
-                  <span>Location</span>
-                </label>
-                <Input
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="e.g. Mumbai, India"
-                  className="h-9 text-xs rounded-xl bg-secondary/30 border-border/70"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1">
-                  <LinkIcon className="w-3 h-3 text-muted-foreground" />
-                  <span>Website / Social Link</span>
-                </label>
-                <Input
-                  value={website}
-                  onChange={(e) => setWebsite(e.target.value)}
-                  placeholder="https://..."
-                  className="h-9 text-xs rounded-xl bg-secondary/30 border-border/70"
-                />
-              </div>
+            {/* Location */}
+            <div>
+              <label className="text-xs font-semibold text-foreground mb-1 flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-muted-foreground" />
+                <span>Location</span>
+              </label>
+              <Input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="e.g. Mumbai, India"
+                maxLength={100}
+                className="h-9 text-xs rounded-xl bg-secondary/30 border-border/70"
+              />
             </div>
 
-            {/* Actions */}
-            <div className="pt-4 border-t border-border/60 flex items-center justify-end gap-2 shrink-0">
+          {/* Actions */}
+          <div className="pt-4 border-t border-border/60 flex items-center justify-between shrink-0">
+            {saveError && (
+              <span className="text-xs text-destructive">{saveError}</span>
+            )}
+            <div className="flex items-center gap-2 ml-auto">
               <Button type="button" variant="ghost" size="sm" onClick={onClose} className="rounded-xl text-xs">
                 Cancel
               </Button>
               <Button
                 type="submit"
+                form="profile-edit-form"
                 size="sm"
-                className="rounded-xl bg-primary hover:bg-primary/90 text-white text-xs px-4 gap-1.5 shadow-xs"
+                disabled={isSaving}
+                className="rounded-xl bg-primary hover:bg-primary/90 text-white text-xs px-4 gap-1.5 shadow-xs disabled:opacity-50"
               >
                 <Save className="w-3.5 h-3.5" />
-                <span>Save Changes</span>
+                <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
               </Button>
             </div>
+          </div>
           </form>
         </motion.div>
       </div>

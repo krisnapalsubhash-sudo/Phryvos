@@ -16,11 +16,9 @@ export async function GET() {
       select: {
         id: true,
         username: true,
-        email: true,
         displayName: true,
         avatar: true,
         interests: true,
-        emailVerified: true,
         createdAt: true,
       },
     });

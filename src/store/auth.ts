@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import type { User } from '@/types';
-import { getSessionEpoch, isStaleRequest } from '@/lib/auth/session-epoch';
+import { getSessionEpoch, isStaleRequest, incrementSessionEpoch } from '@/lib/auth/session-epoch';
 
 const createServerSafeStorage = (): StateStorage => ({
   getItem: (name: string) => {
@@ -41,7 +41,7 @@ interface AuthState {
   updateProfile: (updates: Partial<ExtendedUser>) => void;
   setHydrated: (hydrated: boolean) => void;
 
-  // API-backed action
+  // API-backed actions
   updateProfileAPI: (updates: Partial<ExtendedUser>) => Promise<void>;
   fetchProfile: () => Promise<void>;
 }
@@ -79,15 +79,20 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        const epoch = getSessionEpoch();
+        incrementSessionEpoch();
         set({ user: null, isAuthenticated: false });
         if (typeof window !== 'undefined') {
           try {
-            localStorage.removeItem('phryvos-auth');
+            if (isStaleRequest(epoch)) {
+              localStorage.removeItem('phryvos-auth');
+            }
           } catch {}
         }
       },
 
       reset: () => {
+        incrementSessionEpoch();
         set({ user: null, isAuthenticated: false, isLoading: false });
         if (typeof window !== 'undefined') {
           try {
@@ -116,7 +121,7 @@ export const useAuthStore = create<AuthState>()(
           if (isStaleRequest(epoch)) return;
 
           if (data.success && data.user) {
-            set({ user: data.user });
+            set({ user: { ...data.user, website: undefined }, isAuthenticated: true });
           }
         } catch (error) {
           if (isStaleRequest(epoch)) return;
@@ -134,7 +139,7 @@ export const useAuthStore = create<AuthState>()(
           if (isStaleRequest(epoch)) return;
 
           if (data.success && data.user) {
-            set({ user: data.user, isAuthenticated: true });
+            set({ user: { ...data.user, website: undefined }, isAuthenticated: true });
           }
         } catch (error) {
           if (isStaleRequest(epoch)) return;
